@@ -1,0 +1,31 @@
+{
+  "name": "free-web-screenshots",
+  "version": "1.0.0",
+  "description": "Scheduled website screenshots uploaded to Google Drive",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "dependencies": {
+    "googleapis": "^150.0.1",
+    "node-cron": "^4.0.7",
+    "playwright": "^1.52.0",
+    "pino": "^9.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}

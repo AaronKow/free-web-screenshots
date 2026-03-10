@@ -1,0 +1,16 @@
+services:
+  screenshot-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: free-web-screenshots:latest
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+      # Optional secret mounts:
+      # - ./secrets/google_credentials.json:/run/secrets/google_credentials.json:ro
+      # - ./secrets/google_token.json:/data/tokens/google_token.json
+    restart: unless-stopped
