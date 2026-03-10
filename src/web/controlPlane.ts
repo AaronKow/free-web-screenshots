@@ -21,6 +21,7 @@ interface ControlPlaneDeps {
   getMetrics: () => DashboardMetrics;
   saveSettings: (settings: RuntimeSettings) => Promise<void>;
   restartScheduler: () => Promise<void>;
+  triggerScreenshotNow: () => Promise<void>;
   getOauthAuthorizationUrl: () => string;
 }
 
@@ -171,6 +172,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       <div><label>Scheduler Active</label><div class="mono">${metrics.schedulerActive}</div></div>
       </div>
       <div class="btns">
+        <form method="post" action="/screenshot/now"><button type="submit">Screenshot Now</button></form>
         <form method="post" action="/scheduler/restart"><button class="secondary" type="submit">Restart Scheduler</button></form>
         <a class="btn secondary" href="/logout">Logout</a>
       </div>
@@ -316,6 +318,14 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
     if (req.method === "POST" && url.pathname === "/scheduler/restart") {
       if (!requireAuth(req, res)) return true;
       await deps.restartScheduler();
+      res.writeHead(302, { location: "/" });
+      res.end();
+      return true;
+    }
+
+    if (req.method === "POST" && url.pathname === "/screenshot/now") {
+      if (!requireAuth(req, res)) return true;
+      await deps.triggerScreenshotNow();
       res.writeHead(302, { location: "/" });
       res.end();
       return true;

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "node:http";
 import type { AppConfig, RunConfig } from "./config";
 import { loadConfig } from "./config";
@@ -117,6 +118,31 @@ async function main(): Promise<void> {
     }
   };
 
+  const triggerScreenshotNow = async (): Promise<void> => {
+    if (!runtimeSettings || !refreshToken) {
+      throw new Error("Runtime settings and refresh token are required");
+    }
+    if (healthState.running) {
+      throw new Error("A capture run is already in progress");
+    }
+
+    healthState.running = true;
+    healthState.lastRunStartedAt = new Date().toISOString();
+    try {
+      const currentRunConfig = buildRunConfig(config, runtimeSettings, refreshToken);
+      await runNow(currentRunConfig);
+      healthState.lastRunSuccess = true;
+      healthState.lastError = undefined;
+    } catch (error) {
+      healthState.lastRunSuccess = false;
+      healthState.lastError = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      healthState.running = false;
+      healthState.lastRunFinishedAt = new Date().toISOString();
+    }
+  };
+
   const stopScheduler = async (): Promise<void> => {
     if (!runner) return;
     runner.stop();
@@ -177,6 +203,7 @@ async function main(): Promise<void> {
     }),
     saveSettings,
     restartScheduler: startScheduler,
+    triggerScreenshotNow,
     getOauthAuthorizationUrl: () => {
       if (!oauthSetupHandler) {
         throw new Error("OAuth setup is disabled");
