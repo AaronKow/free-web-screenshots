@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { drive_v3, google } from "googleapis";
 import { logger } from "../logger";
-import type { AppConfig } from "../config";
+import type { RunConfig } from "../config";
 import type { StorageUploader, UploadFileRequest, UploadResult } from "./types";
 import { withRetry } from "../utils/retry";
 
@@ -13,7 +13,11 @@ export class GoogleDriveUploader implements StorageUploader {
   private readonly drive: drive_v3.Drive;
   private readonly oauthClient;
 
-  constructor(private readonly config: AppConfig) {
+  constructor(private readonly config: RunConfig) {
+    if (!config.googleRefreshToken) {
+      throw new Error("GOOGLE_REFRESH_TOKEN is required to initialize GoogleDriveUploader");
+    }
+
     const scope = config.googleDriveMode === "appdata" ? APP_DATA_SCOPE : VISIBLE_FOLDER_SCOPE;
 
     this.oauthClient = new google.auth.OAuth2(

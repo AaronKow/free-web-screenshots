@@ -1,184 +1,190 @@
 # free-web-screenshots
 
-Production-minded Node.js service that captures screenshots of one or more websites on a schedule and uploads them to Google Drive.
+A production-minded Node.js service that captures screenshots of one or more websites on a schedule and uploads them to Google Drive.
 
-## What This App Does
+## Features
 
-- Runs continuously with an in-app cron scheduler (default: every hour).
-- Captures screenshots with Playwright + Chromium for each URL in `TARGET_URLS`.
-- Waits for page stability (`networkidle`) and optional extra delay.
-- Uploads screenshots to Google Drive via official `googleapis` client.
-- Exposes `/health` endpoint for container health checks.
-- Supports:
-  - daemon mode (scheduled)
-  - one-shot mode (`--once`)
-  - config validation mode (`--dry-run`)
+- Playwright + Chromium screenshot capture
+- In-app cron scheduler (default hourly)
+- URL-safe UTC timestamped filenames
+- Structured JSON logging (pino)
+- Retry logic for temporary failures
+- Health endpoint (`/health`) for containers
+- Graceful shutdown (`SIGTERM` / `SIGINT`)
+- Docker and docker-compose support
+- First-run web setup + dashboard on `/`
+- Optional login gate for setup/dashboard (`APP_USER` + `APP_PASS`)
 
-## Security Model (Default and Recommended)
+## Security Model
 
-### Default mode: `appdata`
+### Default (recommended): `appdata`
 
-By default, the app uploads into Google Drive **Application Data folder** using scope:
+Default Drive mode is:
 
-- `https://www.googleapis.com/auth/drive.appdata`
+- `GOOGLE_DRIVE_MODE=appdata`
+- Scope: `https://www.googleapis.com/auth/drive.appdata`
 
-This is the most restrictive mode in this project and is strongly recommended.
+This writes to Google Drive hidden `appDataFolder`:
 
-Important behavior:
+- Not visible in normal Drive UI
+- Accessible only by the authorized app
 
-- Files are written to hidden `appDataFolder`.
-- This folder is **not visible in normal Google Drive UI**.
-- Data is accessible only through the app/API with authorized credentials.
+### Optional: `visible-folder`
 
-### Optional mode: `visible-folder`
+If explicitly needed:
 
-If you explicitly set `GOOGLE_DRIVE_MODE=visible-folder`, the app uploads to a specific folder ID (`GOOGLE_DRIVE_FOLDER_ID`) using:
-
-- `https://www.googleapis.com/auth/drive.file`
+- `GOOGLE_DRIVE_MODE=visible-folder`
+- `GOOGLE_DRIVE_FOLDER_ID=<folder-id>`
+- Scope: `https://www.googleapis.com/auth/drive.file`
 
 Tradeoff:
 
-- Less restrictive than `appdata`.
-- Not strict write-only semantics.
-- Data is in visible Drive space and operational risk is higher.
+- Less restrictive than `appdata`
+- Visible in normal Drive space
 
-The app does **not** use broad full-Drive scope.
+The app does not use full-drive scope.
+
+## First-Run Web Setup Flow
+
+After first deployment, open your app root (`/`).
+
+1. If `APP_USER`/`APP_PASS` are configured, login page is required first.
+2. Root shows setup form for runtime screenshot settings:
+   - `TARGET_URLS`
+   - `CRON_SCHEDULE`
+   - `SCREENSHOT_DIR`
+   - `SCREENSHOT_FULL_PAGE`
+   - `VIEWPORT_WIDTH`
+   - `VIEWPORT_HEIGHT`
+   - `PAGE_TIMEOUT_MS`
+   - `EXTRA_WAIT_MS`
+   - `DELETE_LOCAL_AFTER_UPLOAD`
+   - `RETRY_ATTEMPTS`
+   - `RETRY_BASE_DELAY_MS`
+   - `RETRY_MAX_DELAY_MS`
+   - `GOOGLE_DRIVE_MODE`
+   - `GOOGLE_DRIVE_FOLDER_ID`
+3. Click **Proceed and Initialize**.
+4. App persists runtime settings to:
+   - `APP_RUNTIME_CONFIG_FILE` (JSON)
+   - `APP_RUNTIME_ENV_FILE` (dotenv-style)
+5. App redirects to Google OAuth start path (`OAUTH_SETUP_PATH`, default `/oauth/start`).
+6. Google redirects back to callback path (`OAUTH_CALLBACK_PATH`, default `/callback`).
+7. Refresh token is stored at `GOOGLE_TOKEN_FILE` and scheduler starts.
+8. Root (`/`) becomes dashboard with metrics and scheduler restart/config update actions.
+
+## Dashboard
+
+Root dashboard includes:
+
+- Total runs
+- Total URL success count
+- Total URL failure count
+- Scheduler active state
+- Reconfigure + save + restart
+- Manual scheduler restart button
+
+## Runtime Config Precedence
+
+At startup, runtime settings are loaded in this order:
+
+1. `APP_RUNTIME_CONFIG_FILE` (if present)
+2. Bootstrap from environment variables (`TARGET_URLS`, `CRON_SCHEDULE`, etc.) if valid
+3. Otherwise setup remains pending until form submission
 
 ## Prerequisites
 
-- Node.js 20 LTS or newer
+- Node.js 20+
 - npm 10+
-- Google Cloud project with Drive API enabled
-- OAuth 2.0 client credentials
-- A valid refresh token
-- Linux server/VPS (recommended for continuous operation)
-
-## Project Structure
-
-- `src/config` - env parsing and validation
-- `src/services` - screenshot workflow
-- `src/storage` - pluggable uploader interface + Google Drive implementation
-- `src/scheduler` - cron orchestration
-- `src/health` - health state + HTTP endpoint
-- `src/logger` - structured logs
-- `src/utils` - retry and filename utilities
-- `test` - unit tests
-
-## Environment Variables
-
-See `.env.example` for full list.
-
-Required in normal operation:
-
-- `TARGET_URLS`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REDIRECT_URI`
-- `GOOGLE_REFRESH_TOKEN` (or token file mode)
-
-Main options:
-
-- `CRON_SCHEDULE` default: `0 * * * *`
-- `SCREENSHOT_DIR` default: `/tmp/screenshots`
-- `SCREENSHOT_FULL_PAGE` default: `false`
-- `VIEWPORT_WIDTH` default: `1366`
-- `VIEWPORT_HEIGHT` default: `768`
-- `PAGE_TIMEOUT_MS` default: `30000`
-- `EXTRA_WAIT_MS` default: `0`
-- `DELETE_LOCAL_AFTER_UPLOAD` default: `true`
-- `GOOGLE_DRIVE_MODE` default: `appdata`
-- `GOOGLE_DRIVE_FOLDER_ID` required only for `visible-folder`
-- `LOG_LEVEL` default: `info`
-- `PORT` default: `8080`
-
-Retry tuning:
-
-- `RETRY_ATTEMPTS` default: `3`
-- `RETRY_BASE_DELAY_MS` default: `1000`
-- `RETRY_MAX_DELAY_MS` default: `10000`
-
-Optional file-based secret loading:
-
-- `GOOGLE_CREDENTIALS_FILE` JSON with `client_id`, `client_secret`, `redirect_uri`
-- `GOOGLE_TOKEN_FILE` JSON with `refresh_token` (and token persistence)
+- Google Cloud project
+- Google Drive API enabled
+- OAuth 2.0 credentials
 
 ## Google Cloud Setup
 
-1. Create/select a Google Cloud project.
-2. Enable API:
-   - Google Drive API
+1. Create/select Google Cloud project.
+2. Enable **Google Drive API**.
 3. Configure OAuth consent screen.
-4. Create OAuth client credentials (Desktop app or Web app).
-5. Save:
-   - client ID
-   - client secret
-   - redirect URI
+4. Create OAuth 2.0 client credentials (Web application recommended for deployed callback).
+5. Add authorized redirect URI matching your callback path, for example:
+   - `https://screenshots.example.com/callback`
 
-## OAuth Setup and Refresh Token (Safe Flow)
+## Environment Variables
 
-Use OAuth 2.0 authorization code flow and request only required scope.
+See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.example).
 
-Default secure mode scope:
+### OAuth / app identity
 
-- `https://www.googleapis.com/auth/drive.appdata`
+- `GOOGLE_CLIENT_ID` (required)
+- `GOOGLE_CLIENT_SECRET` (required)
+- `GOOGLE_REDIRECT_URI` (required)
+- `GOOGLE_REFRESH_TOKEN` (optional if using setup flow + token file)
+- `GOOGLE_TOKEN_FILE` (recommended; required for hosted setup)
+- `GOOGLE_CREDENTIALS_FILE` (optional)
 
-Optional visible-folder mode scope:
+### Hosted setup controls
 
-- `https://www.googleapis.com/auth/drive.file`
+- `OAUTH_SETUP_ENABLED` (`true`/`false`)
+- `APP_BASE_URL` (required when setup enabled)
+- `OAUTH_SETUP_PATH` (default `/oauth/start`)
+- `OAUTH_CALLBACK_PATH` (default `/callback`)
+- `OAUTH_STATE_SECRET` (required when setup enabled; at least 32 chars)
 
-Suggested safe method:
+### Dashboard login gate
 
-1. Build an auth URL with your client credentials and the intended scope.
-2. Complete consent in browser.
-3. Exchange auth code for tokens server-side.
-4. Store only refresh token in:
-   - environment variable (`GOOGLE_REFRESH_TOKEN`) or
-   - mounted token file (`GOOGLE_TOKEN_FILE`) with strict file permissions.
+- `APP_USER` (optional, must be paired with `APP_PASS`)
+- `APP_PASS` (optional, must be paired with `APP_USER`)
 
-Never commit tokens or credentials to source control.
+### Runtime persistence
+
+- `APP_RUNTIME_CONFIG_FILE` (default `/data/runtime-config.json`)
+- `APP_RUNTIME_ENV_FILE` (default `/data/runtime.env`)
+
+### Bootstrap defaults (used before first saved runtime config)
+
+- `TARGET_URLS`
+- `CRON_SCHEDULE`
+- `SCREENSHOT_DIR`
+- `SCREENSHOT_FULL_PAGE`
+- `VIEWPORT_WIDTH`
+- `VIEWPORT_HEIGHT`
+- `PAGE_TIMEOUT_MS`
+- `EXTRA_WAIT_MS`
+- `DELETE_LOCAL_AFTER_UPLOAD`
+- `RETRY_ATTEMPTS`
+- `RETRY_BASE_DELAY_MS`
+- `RETRY_MAX_DELAY_MS`
+- `GOOGLE_DRIVE_MODE`
+- `GOOGLE_DRIVE_FOLDER_ID`
+- `LOG_LEVEL`
+- `PORT`
 
 ## Local Development
 
 ```bash
 npm install
 cp .env.example .env
-# edit .env with real values
-```
-
-Validate config only:
-
-```bash
+# edit .env
 npm run dev -- --dry-run
-```
-
-Run one-shot capture:
-
-```bash
-npm run dev -- --once
-```
-
-Run daemon scheduler:
-
-```bash
 npm run dev
 ```
 
-Build + run production JS:
+## Runtime Modes
 
-```bash
-npm run build
-npm start
-```
+- `npm run dev` -> daemon mode
+- `npm run dev -- --once` -> capture immediately once, then exit
+- `npm run dev -- --dry-run` -> validate startup config
+- `npm run dev -- --setup` -> setup server mode (no scheduler start)
 
 ## Docker
 
-Build image:
+Build:
 
 ```bash
 docker build -t free-web-screenshots:latest .
 ```
 
-Run container:
+Run:
 
 ```bash
 docker run -d \
@@ -189,88 +195,62 @@ docker run -d \
   free-web-screenshots:latest
 ```
 
-Health endpoint:
-
-- `GET /health`
-
-Container includes Docker `HEALTHCHECK` against `/health`.
-
 ## docker-compose
 
 ```bash
 docker compose up -d --build
 ```
 
-Example persists only runtime data under `./data` (screenshots temp files and token file if used).
+Persist `./data` so token/config survive restarts.
 
-## VPS Deployment Notes
+## Health Endpoint
 
-- Use a dedicated low-privilege OS user.
-- Keep `.env` and secret files readable only by service user.
-- Prefer mounted secret files over baking secrets into images.
-- Restrict inbound network to required management and app ports.
-- Keep host and container base image updated.
-- Run behind reverse proxy/firewall if exposing `/health` publicly.
+`GET /health`
 
-## Runtime Modes
+Response includes:
 
-- `node dist/src/index.js` -> daemon mode (scheduled)
-- `node dist/src/index.js --once` -> run now and exit
-- `node dist/src/index.js --dry-run` -> validate configuration and exit
-
-Startup misconfiguration exits non-zero.
-
-## Logging
-
-Structured JSON logs to stdout with pino.
-
-- Per-URL success/failure is logged each run.
-- Secrets/tokens are redacted.
-- Access tokens, refresh tokens, client secrets, and auth headers are never logged intentionally.
-
-## Testing
-
-Run unit tests:
-
-```bash
-npm test
-```
-
-Tests included:
-
-- config validation behavior
-- URL-safe filename generation with UTC timestamps
+- `status` (`ok`, `setup_required`, `shutting_down`)
+- run timestamps + duration
+- aggregate run metrics
+- `schedulerActive`
 
 ## Security Best Practices
 
-- Keep default `GOOGLE_DRIVE_MODE=appdata`.
-- Use least-privilege scope only.
-- Do not grant broad Drive scopes.
-- Rotate OAuth credentials periodically.
-- Use private networks and hardened host OS.
-- Keep token files out of git and image layers.
-- Set `DELETE_LOCAL_AFTER_UPLOAD=true` unless you need local retention.
+- Keep `GOOGLE_DRIVE_MODE=appdata` unless visible folder is required
+- Use HTTPS in production
+- Protect root UI with `APP_USER` + strong `APP_PASS`
+- Keep `OAUTH_STATE_SECRET` private and long
+- Mount secrets/token files; do not commit them
+- Keep `DELETE_LOCAL_AFTER_UPLOAD=true` unless local retention is required
+- Consider disabling setup mode (`OAUTH_SETUP_ENABLED=false`) after initialization
 
 ## Troubleshooting
 
 1. `Configuration error(s)` on startup:
-   - run `--dry-run`, check required env vars and cron syntax.
-2. OAuth failures (`invalid_grant`, `unauthorized_client`):
-   - verify redirect URI, consent screen, refresh token validity, and scope alignment.
-3. Upload fails in `visible-folder` mode:
-   - verify folder ID and account access.
-4. Browser launch failures in containers:
-   - rebuild image and ensure Chromium dependencies are installed.
-5. `/health` returns 503:
-   - process is shutting down after signal.
+   - Run `npm run dev -- --dry-run` and fix missing/invalid env values.
+2. Root keeps showing setup form:
+   - Ensure runtime settings were saved and `GOOGLE_TOKEN_FILE` contains `refresh_token`.
+3. OAuth callback fails:
+   - Verify `GOOGLE_REDIRECT_URI` exactly matches Google OAuth client settings.
+4. No refresh token returned:
+   - Revoke prior app access, re-run setup (OAuth uses `offline` + `consent`).
+5. Visible-folder upload errors:
+   - Verify `GOOGLE_DRIVE_FOLDER_ID` and account permissions.
+
+## Testing
+
+```bash
+npm run lint
+npm test
+npm run build
+```
 
 ## Limitations
 
-- Captures only Chromium screenshots (no PDF/export variants).
-- Dynamic pages that never settle may rely on timeout fallback.
-- Current storage backend is Google Drive only (interface allows future backends).
-- Per-URL schedule granularity is not supported (single global schedule).
+- Single global schedule for all target URLs
+- In-memory auth sessions (login sessions reset on process restart)
+- Google Drive is the only implemented storage backend (interface is modular)
 
 ## License
 
-MIT (see `LICENSE`).
+MIT (`LICENSE`)

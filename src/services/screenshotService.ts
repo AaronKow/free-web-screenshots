@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { BrowserContext, Page, chromium } from "playwright";
-import type { AppConfig } from "../config";
+import type { RunConfig } from "../config";
 import { logger } from "../logger";
 import type { StorageUploader } from "../storage/types";
 import { buildScreenshotFilename, buildScreenshotPath } from "../utils/filename";
@@ -23,7 +23,7 @@ export interface CaptureRunSummary {
 
 export class ScreenshotService {
   constructor(
-    private readonly config: AppConfig,
+    private readonly config: RunConfig,
     private readonly uploader: StorageUploader
   ) {}
 

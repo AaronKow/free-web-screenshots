@@ -45,10 +45,12 @@ export function createScheduledRunner(
   return {
     start() {
       task.start();
+      healthState.schedulerActive = true;
       logger.info({ schedule }, "Scheduler started");
     },
     stop() {
       task.stop();
+      healthState.schedulerActive = false;
       logger.info("Scheduler stopped");
     },
     async triggerNow() {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config";
+import { parseRuntimeSettingsInput } from "../src/runtime/settings";
 
 function baseEnv(): NodeJS.ProcessEnv {
   return {
-    TARGET_URLS: "https://example.com",
     GOOGLE_CLIENT_ID: "client-id",
     GOOGLE_CLIENT_SECRET: "client-secret",
-    GOOGLE_REDIRECT_URI: "http://localhost/oauth2callback",
+    GOOGLE_REDIRECT_URI: "http://localhost/callback",
     GOOGLE_REFRESH_TOKEN: "refresh-token"
   };
 }
@@ -14,36 +14,91 @@ function baseEnv(): NodeJS.ProcessEnv {
 describe("loadConfig", () => {
   it("loads defaults", () => {
     const config = loadConfig(baseEnv());
-    expect(config.googleDriveMode).toBe("appdata");
-    expect(config.cronSchedule).toBe("0 * * * *");
-    expect(config.deleteLocalAfterUpload).toBe(true);
-    expect(config.targetUrls).toEqual(["https://example.com"]);
+    expect(config.port).toBe(8080);
+    expect(config.oauthSetupPath).toBe("/oauth/start");
   });
 
-  it("requires folder id in visible-folder mode", () => {
+  it("allows no refresh token when oauth setup enabled", () => {
+    const config = loadConfig({
+      ...baseEnv(),
+      GOOGLE_REFRESH_TOKEN: "",
+      GOOGLE_REDIRECT_URI: "https://screenshots.example.com/callback",
+      OAUTH_SETUP_ENABLED: "true",
+      APP_BASE_URL: "https://screenshots.example.com",
+      OAUTH_STATE_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
+      GOOGLE_TOKEN_FILE: "/tmp/google-token.json"
+    });
+
+    expect(config.googleRefreshToken).toBeUndefined();
+    expect(config.oauthSetupEnabled).toBe(true);
+  });
+
+  it("requires app user and pass together", () => {
     expect(() =>
       loadConfig({
         ...baseEnv(),
-        GOOGLE_DRIVE_MODE: "visible-folder"
+        APP_USER: "admin"
       })
-    ).toThrow(/GOOGLE_DRIVE_FOLDER_ID is required/);
+    ).toThrow(/APP_USER and APP_PASS/);
   });
 
-  it("rejects invalid cron", () => {
+  it("enforces hosted callback redirect match", () => {
     expect(() =>
       loadConfig({
         ...baseEnv(),
-        CRON_SCHEDULE: "not-a-cron"
+        GOOGLE_REFRESH_TOKEN: "",
+        OAUTH_SETUP_ENABLED: "true",
+        APP_BASE_URL: "https://screenshots.example.com",
+        OAUTH_STATE_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
+        GOOGLE_TOKEN_FILE: "/tmp/google-token.json",
+        GOOGLE_REDIRECT_URI: "https://screenshots.example.com/other"
       })
-    ).toThrow(/CRON_SCHEDULE is invalid/);
+    ).toThrow(/GOOGLE_REDIRECT_URI must equal/);
+  });
+});
+
+describe("parseRuntimeSettingsInput", () => {
+  it("accepts valid settings", () => {
+    const parsed = parseRuntimeSettingsInput({
+      targetUrls: "https://example.com,https://example.org",
+      cronSchedule: "0 * * * *",
+      screenshotDir: "/data/screenshots",
+      screenshotFullPage: "false",
+      viewportWidth: "1366",
+      viewportHeight: "768",
+      pageTimeoutMs: "30000",
+      extraWaitMs: "0",
+      deleteLocalAfterUpload: "true",
+      retryAttempts: "3",
+      retryBaseDelayMs: "1000",
+      retryMaxDelayMs: "10000",
+      googleDriveMode: "appdata",
+      googleDriveFolderId: ""
+    });
+
+    expect(parsed.errors).toHaveLength(0);
+    expect(parsed.value?.targetUrls).toHaveLength(2);
   });
 
-  it("rejects invalid target urls", () => {
-    expect(() =>
-      loadConfig({
-        ...baseEnv(),
-        TARGET_URLS: "ftp://example.com"
-      })
-    ).toThrow(/unsupported protocol/);
+  it("rejects visible-folder without folder id", () => {
+    const parsed = parseRuntimeSettingsInput({
+      targetUrls: "https://example.com",
+      cronSchedule: "0 * * * *",
+      screenshotDir: "/data/screenshots",
+      screenshotFullPage: "false",
+      viewportWidth: "1366",
+      viewportHeight: "768",
+      pageTimeoutMs: "30000",
+      extraWaitMs: "0",
+      deleteLocalAfterUpload: "true",
+      retryAttempts: "3",
+      retryBaseDelayMs: "1000",
+      retryMaxDelayMs: "10000",
+      googleDriveMode: "visible-folder",
+      googleDriveFolderId: ""
+    });
+
+    expect(parsed.value).toBeUndefined();
+    expect(parsed.errors.join(" ")).toMatch(/GOOGLE_DRIVE_FOLDER_ID/);
   });
 });

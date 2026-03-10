@@ -1,10 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
-import cron from "node-cron";
-
-export type GoogleDriveMode = "appdata" | "visible-folder";
 
 export interface AppConfig {
+  googleClientId: string;
+  googleClientSecret: string;
+  googleRedirectUri: string;
+  googleRefreshToken?: string;
+  googleTokenFile?: string;
+  oauthSetupEnabled: boolean;
+  appBaseUrl?: string;
+  oauthStateSecret?: string;
+  oauthSetupPath: string;
+  oauthCallbackPath: string;
+  appUser?: string;
+  appPass?: string;
+  appRuntimeConfigFile: string;
+  appRuntimeEnvFile: string;
+  logLevel: string;
+  port: number;
+}
+
+export interface RunConfig {
   targetUrls: string[];
   cronSchedule: string;
   screenshotDir: string;
@@ -14,18 +30,16 @@ export interface AppConfig {
   pageTimeoutMs: number;
   extraWaitMs: number;
   deleteLocalAfterUpload: boolean;
-  googleDriveMode: GoogleDriveMode;
+  retryAttempts: number;
+  retryBaseDelayMs: number;
+  retryMaxDelayMs: number;
+  googleDriveMode: "appdata" | "visible-folder";
   googleDriveFolderId?: string;
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
   googleRefreshToken: string;
   googleTokenFile?: string;
-  logLevel: string;
-  port: number;
-  retryAttempts: number;
-  retryBaseDelayMs: number;
-  retryMaxDelayMs: number;
 }
 
 interface CredentialFileShape {
@@ -85,36 +99,6 @@ function parseInteger(value: string | undefined, fallback: number, key: string, 
   return parsed;
 }
 
-function parseUrls(raw: string | undefined, errors: string[]): string[] {
-  if (!raw || raw.trim() === "") {
-    errors.push("TARGET_URLS is required");
-    return [];
-  }
-
-  const urls = raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-  if (urls.length === 0) {
-    errors.push("TARGET_URLS must contain at least one URL");
-    return [];
-  }
-
-  for (const url of urls) {
-    try {
-      const parsed = new URL(url);
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        errors.push(`TARGET_URLS contains unsupported protocol for URL: ${url}`);
-      }
-    } catch {
-      errors.push(`TARGET_URLS contains invalid URL: ${url}`);
-    }
-  }
-
-  return urls;
-}
-
 function readJsonFile<T>(filePath: string): T {
   const raw = fs.readFileSync(filePath, "utf-8");
   return JSON.parse(raw) as T;
@@ -154,61 +138,19 @@ function maybeLoadTokenFile(env: NodeJS.ProcessEnv): { refreshToken?: string; to
   };
 }
 
+function normalizePathInput(raw: string | undefined, fallback: string): string {
+  const value = (raw?.trim() || fallback).trim();
+  if (!value.startsWith("/")) {
+    throw new Error(`Path must begin with '/': ${value}`);
+  }
+  return value;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const errors: string[] = [];
 
   const credentialsFromFile = maybeLoadCredentialFile(env);
   const tokenFromFile = maybeLoadTokenFile(env);
-
-  const targetUrls = parseUrls(env.TARGET_URLS, errors);
-
-  const cronSchedule = env.CRON_SCHEDULE?.trim() || "0 * * * *";
-  if (!cron.validate(cronSchedule)) {
-    errors.push(`CRON_SCHEDULE is invalid: ${cronSchedule}`);
-  }
-
-  const screenshotDir = path.resolve(env.SCREENSHOT_DIR?.trim() || "/tmp/screenshots");
-
-  let screenshotFullPage = false;
-  let deleteLocalAfterUpload = true;
-  try {
-    screenshotFullPage = parseBoolean(env.SCREENSHOT_FULL_PAGE, false);
-    deleteLocalAfterUpload = parseBoolean(env.DELETE_LOCAL_AFTER_UPLOAD, true);
-  } catch (error) {
-    errors.push((error as Error).message);
-  }
-
-  let viewportWidth = 1366;
-  let viewportHeight = 768;
-  let pageTimeoutMs = 30000;
-  let extraWaitMs = 0;
-  let port = 8080;
-  let retryAttempts = 3;
-  let retryBaseDelayMs = 1000;
-  let retryMaxDelayMs = 10000;
-
-  try {
-    viewportWidth = parseInteger(env.VIEWPORT_WIDTH, 1366, "VIEWPORT_WIDTH", 1);
-    viewportHeight = parseInteger(env.VIEWPORT_HEIGHT, 768, "VIEWPORT_HEIGHT", 1);
-    pageTimeoutMs = parseInteger(env.PAGE_TIMEOUT_MS, 30000, "PAGE_TIMEOUT_MS", 1000);
-    extraWaitMs = parseInteger(env.EXTRA_WAIT_MS, 0, "EXTRA_WAIT_MS", 0);
-    port = parseInteger(env.PORT, 8080, "PORT", 1);
-    retryAttempts = parseInteger(env.RETRY_ATTEMPTS, 3, "RETRY_ATTEMPTS", 0);
-    retryBaseDelayMs = parseInteger(env.RETRY_BASE_DELAY_MS, 1000, "RETRY_BASE_DELAY_MS", 1);
-    retryMaxDelayMs = parseInteger(env.RETRY_MAX_DELAY_MS, 10000, "RETRY_MAX_DELAY_MS", 1);
-  } catch (error) {
-    errors.push((error as Error).message);
-  }
-
-  const googleDriveMode = (env.GOOGLE_DRIVE_MODE?.trim() || "appdata") as GoogleDriveMode;
-  if (!["appdata", "visible-folder"].includes(googleDriveMode)) {
-    errors.push("GOOGLE_DRIVE_MODE must be either appdata or visible-folder");
-  }
-
-  const googleDriveFolderId = env.GOOGLE_DRIVE_FOLDER_ID?.trim();
-  if (googleDriveMode === "visible-folder" && !googleDriveFolderId) {
-    errors.push("GOOGLE_DRIVE_FOLDER_ID is required when GOOGLE_DRIVE_MODE=visible-folder");
-  }
 
   const googleClientId =
     env.GOOGLE_CLIENT_ID?.trim() || credentialsFromFile.client_id || required(undefined, "GOOGLE_CLIENT_ID", errors);
@@ -221,34 +163,93 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     credentialsFromFile.redirect_uri ||
     required(undefined, "GOOGLE_REDIRECT_URI", errors);
 
-  const googleRefreshToken =
-    env.GOOGLE_REFRESH_TOKEN?.trim() || tokenFromFile.refreshToken || required(undefined, "GOOGLE_REFRESH_TOKEN", errors);
+  const googleRefreshToken = env.GOOGLE_REFRESH_TOKEN?.trim() || tokenFromFile.refreshToken;
+
+  let oauthSetupEnabled = false;
+  try {
+    oauthSetupEnabled = parseBoolean(env.OAUTH_SETUP_ENABLED, false);
+  } catch (error) {
+    errors.push((error as Error).message);
+  }
+
+  let oauthSetupPath = "/oauth/start";
+  let oauthCallbackPath = "/callback";
+  let port = 8080;
+
+  try {
+    oauthSetupPath = normalizePathInput(env.OAUTH_SETUP_PATH, "/oauth/start");
+    oauthCallbackPath = normalizePathInput(env.OAUTH_CALLBACK_PATH, "/callback");
+    port = parseInteger(env.PORT, 8080, "PORT", 1);
+  } catch (error) {
+    errors.push((error as Error).message);
+  }
+
+  const appBaseUrl = env.APP_BASE_URL?.trim();
+  const oauthStateSecret = env.OAUTH_STATE_SECRET?.trim();
+
+  if (oauthSetupEnabled) {
+    if (!tokenFromFile.tokenFile) {
+      errors.push("GOOGLE_TOKEN_FILE is required when OAUTH_SETUP_ENABLED=true");
+    }
+
+    if (!appBaseUrl) {
+      errors.push("APP_BASE_URL is required when OAUTH_SETUP_ENABLED=true");
+    }
+
+    if (!oauthStateSecret || oauthStateSecret.length < 32) {
+      errors.push("OAUTH_STATE_SECRET is required and must be at least 32 chars when OAUTH_SETUP_ENABLED=true");
+    }
+
+    if (appBaseUrl) {
+      try {
+        const parsedBase = new URL(appBaseUrl);
+        if (parsedBase.protocol !== "https:" && parsedBase.hostname !== "localhost") {
+          errors.push("APP_BASE_URL must use https in non-local environments");
+        }
+
+        const expectedRedirect = new URL(oauthCallbackPath, parsedBase).toString();
+        if (googleRedirectUri && googleRedirectUri !== expectedRedirect) {
+          errors.push(`GOOGLE_REDIRECT_URI must equal ${expectedRedirect} when OAUTH_SETUP_ENABLED=true`);
+        }
+      } catch {
+        errors.push("APP_BASE_URL must be a valid URL");
+      }
+    }
+  }
+
+  const appUser = env.APP_USER?.trim();
+  const appPass = env.APP_PASS?.trim();
+  if ((appUser && !appPass) || (!appUser && appPass)) {
+    errors.push("APP_USER and APP_PASS must be set together");
+  }
+
+  const appRuntimeConfigFile = path.resolve(env.APP_RUNTIME_CONFIG_FILE?.trim() || "/data/runtime-config.json");
+  const appRuntimeEnvFile = path.resolve(env.APP_RUNTIME_ENV_FILE?.trim() || "/data/runtime.env");
+
+  if (!oauthSetupEnabled && !googleRefreshToken) {
+    errors.push("GOOGLE_REFRESH_TOKEN is required unless OAUTH_SETUP_ENABLED=true with GOOGLE_TOKEN_FILE");
+  }
 
   if (errors.length > 0) {
     throw new Error(`Configuration error(s):\n- ${errors.join("\n- ")}`);
   }
 
   return {
-    targetUrls,
-    cronSchedule,
-    screenshotDir,
-    screenshotFullPage,
-    viewportWidth,
-    viewportHeight,
-    pageTimeoutMs,
-    extraWaitMs,
-    deleteLocalAfterUpload,
-    googleDriveMode,
-    googleDriveFolderId,
     googleClientId,
     googleClientSecret,
     googleRedirectUri,
     googleRefreshToken,
     googleTokenFile: tokenFromFile.tokenFile,
+    oauthSetupEnabled,
+    appBaseUrl,
+    oauthStateSecret,
+    oauthSetupPath,
+    oauthCallbackPath,
+    appUser,
+    appPass,
+    appRuntimeConfigFile,
+    appRuntimeEnvFile,
     logLevel: env.LOG_LEVEL?.trim() || "info",
-    port,
-    retryAttempts,
-    retryBaseDelayMs,
-    retryMaxDelayMs
+    port
   };
 }
