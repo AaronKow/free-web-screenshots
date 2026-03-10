@@ -203,6 +203,46 @@ docker compose up -d --build
 
 Persist `./data` so token/config survive restarts.
 
+## PM2 Setup and Deployment
+
+### 1) One-time server setup
+
+```bash
+# from project root
+npm install
+npm run build
+npx pm2 start ecosystem.config.cjs --env production
+npx pm2 save
+```
+
+To auto-start PM2 on reboot:
+
+```bash
+npx pm2 startup
+# run the command PM2 prints after this
+npx pm2 save
+```
+
+### 2) Day-to-day process management
+
+```bash
+npm run status:pm2
+npm run logs:pm2
+npm run restart:pm2
+npm run stop:pm2
+```
+
+### 3) Deploy updates with PM2
+
+```bash
+git pull
+npm install
+npm run build
+npm run restart:pm2
+```
+
+First deploy still requires OAuth/runtime setup from the root URL (`/`) unless `GOOGLE_REFRESH_TOKEN` and runtime config are already present.
+
 ## Health Endpoint
 
 `GET /health`

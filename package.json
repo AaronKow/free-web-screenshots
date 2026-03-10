@@ -8,6 +8,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:pm2": "pm2 start ecosystem.config.cjs --env production",
+    "restart:pm2": "pm2 restart free-web-screenshots --update-env",
+    "stop:pm2": "pm2 stop free-web-screenshots",
+    "delete:pm2": "pm2 delete free-web-screenshots",
+    "logs:pm2": "pm2 logs free-web-screenshots",
+    "status:pm2": "pm2 status",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
