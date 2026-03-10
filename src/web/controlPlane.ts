@@ -84,6 +84,14 @@ button.secondary,a.secondary{background:#1e293b}
 </style></head><body><div class="wrap">${body}</div></body></html>`;
 }
 
+function buildNoticeRedirect(message: string, type: "success" | "error"): string {
+  const params = new URLSearchParams({
+    notice: message,
+    noticeType: type
+  });
+  return `/?${params.toString()}`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -133,10 +141,11 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
     );
   }
 
-  function renderForm(settingsInput: RuntimeSettingsInput, error?: string): string {
+  function renderForm(settingsInput: RuntimeSettingsInput, error?: string, notice?: string, noticeType?: string): string {
     return htmlPage(
       "Setup",
       `<div class="card"><h1>Initial Setup</h1><p>Configure screenshot behavior, then initialize OAuth.</p>
+      ${notice ? `<p class="badge ${noticeType === "error" ? "warn" : ""}">${escapeHtml(notice)}</p>` : ""}
       ${error ? `<p class="badge warn">${escapeHtml(error)}</p>` : ""}
       <form method="post" action="/setup/save"><div class="grid">
       <div class="full"><label>TARGET_URLS (comma-separated)</label><textarea name="targetUrls" required>${escapeHtml(settingsInput.targetUrls)}</textarea></div>
@@ -157,13 +166,20 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
     );
   }
 
-  function renderDashboard(settings: RuntimeSettings, metrics: DashboardMetrics, hasRefreshToken: boolean): string {
+  function renderDashboard(
+    settings: RuntimeSettings,
+    metrics: DashboardMetrics,
+    hasRefreshToken: boolean,
+    notice?: string,
+    noticeType?: string
+  ): string {
     const settingsInput = runtimeSettingsToInput(settings);
 
     return htmlPage(
       "Dashboard",
       `<div class="card"><h1>Screenshot Dashboard</h1>
       <p>Runtime status and scheduler controls.</p>
+      ${notice ? `<p><span class="badge ${noticeType === "error" ? "warn" : ""}">${escapeHtml(notice)}</span></p>` : ""}
       <p><span class="badge ${hasRefreshToken ? "" : "warn"}">${hasRefreshToken ? "OAuth ready" : "OAuth setup required"}</span></p>
       <div class="grid">
       <div><label>Total Runs</label><div class="mono">${metrics.totalRuns}</div></div>
@@ -246,15 +262,17 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
 
       const settings = deps.getRuntimeSettings();
       const hasRefreshToken = deps.getHasRefreshToken();
+      const notice = (url.searchParams.get("notice") || "").trim();
+      const noticeType = (url.searchParams.get("noticeType") || "success").trim();
 
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
       if (!settings || !hasRefreshToken) {
         const input = runtimeSettingsToInput(settings || buildDefaultRuntimeSettings());
-        res.end(renderForm(input));
+        res.end(renderForm(input, undefined, notice, noticeType));
         return true;
       }
 
-      res.end(renderDashboard(settings, deps.getMetrics(), hasRefreshToken));
+      res.end(renderDashboard(settings, deps.getMetrics(), hasRefreshToken, notice, noticeType));
       return true;
     }
 
@@ -325,8 +343,13 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
 
     if (req.method === "POST" && url.pathname === "/screenshot/now") {
       if (!requireAuth(req, res)) return true;
-      await deps.triggerScreenshotNow();
-      res.writeHead(302, { location: "/" });
+      try {
+        await deps.triggerScreenshotNow();
+        res.writeHead(302, { location: buildNoticeRedirect("Screenshot run completed successfully.", "success") });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Screenshot run failed";
+        res.writeHead(302, { location: buildNoticeRedirect(`Screenshot run failed: ${message}`, "error") });
+      }
       res.end();
       return true;
     }
