@@ -1,10 +1,10 @@
 # free-web-screenshots
 
-A production-minded Node.js service that captures screenshots of one or more websites on a schedule and uploads them to Google Drive.
+A production-minded Node.js service that captures screenshots and short videos of one or more websites on a schedule and uploads them to Google Drive.
 
 ## Features
 
-- Playwright + Chromium screenshot capture
+- Playwright + Chromium screenshot and short video capture
 - In-app cron scheduler (default hourly)
 - URL-safe UTC timestamped filenames
 - Structured JSON logging (pino)
@@ -49,12 +49,16 @@ The app does not use full-drive scope.
 After first deployment, open your app root (`/`).
 
 1. If `APP_USER`/`APP_PASS` are configured, login page is required first.
-2. Root shows setup form for runtime screenshot settings:
+2. Root shows setup form for runtime capture settings:
    - `TARGET_URLS`
    - `CRON_SCHEDULE`
    - `SCREENSHOT_DIR`
-- `PRE_SCREENSHOT_SCRIPT` (optional JavaScript executed in the page before capture)
+   - `CAPTURE_MODE` (`screenshot`, `video`, or `both`)
+   - `PRE_SCREENSHOT_SCRIPT` (optional JavaScript executed in the page before capture)
    - `SCREENSHOT_FULL_PAGE`
+   - `VIDEO_DURATION_SEC`
+   - `VIDEO_WIDTH`
+   - `VIDEO_HEIGHT`
    - `VIEWPORT_WIDTH`
    - `VIEWPORT_HEIGHT`
    - `PAGE_TIMEOUT_MS`
@@ -145,8 +149,12 @@ See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.
 - `TARGET_URLS`
 - `CRON_SCHEDULE`
 - `SCREENSHOT_DIR`
+- `CAPTURE_MODE` (`screenshot`, `video`, or `both`)
 - `PRE_SCREENSHOT_SCRIPT` (optional JavaScript executed in the page before screenshot)
 - `SCREENSHOT_FULL_PAGE`
+- `VIDEO_DURATION_SEC`
+- `VIDEO_WIDTH`
+- `VIDEO_HEIGHT`
 - `VIEWPORT_WIDTH`
 - `VIEWPORT_HEIGHT`
 - `PAGE_TIMEOUT_MS`
@@ -176,6 +184,15 @@ npm run dev
 - `npm run dev -- --once` -> capture immediately once, then exit
 - `npm run dev -- --dry-run` -> validate startup config
 - `npm run dev -- --setup` -> setup server mode (no scheduler start)
+
+## Video Capture Notes
+
+- Set `CAPTURE_MODE=video` or `CAPTURE_MODE=both` to enable video capture on each cron run.
+- Default short recording is `VIDEO_DURATION_SEC=15`.
+- Default video size is `960x540` (`VIDEO_WIDTH`/`VIDEO_HEIGHT`) for lightweight uploads with good clarity.
+- Video output is AV1-encoded MP4 (`*.mp4`) via `ffmpeg` (`libsvtav1`).
+- `ffmpeg` must be installed on the runtime host/container.
+- Recording cadence is controlled by your existing `CRON_SCHEDULE`.
 
 ## Custom Script Guide (Copy/Paste)
 

@@ -3,13 +3,18 @@ import path from "node:path";
 import cron from "node-cron";
 
 export type GoogleDriveMode = "appdata" | "visible-folder";
+export type CaptureMode = "screenshot" | "video" | "both";
 
 export interface RuntimeSettings {
   targetUrls: string[];
   cronSchedule: string;
   screenshotDir: string;
+  captureMode: CaptureMode;
   preScreenshotScript: string;
   screenshotFullPage: boolean;
+  videoDurationSec: number;
+  videoWidth: number;
+  videoHeight: number;
   viewportWidth: number;
   viewportHeight: number;
   pageTimeoutMs: number;
@@ -26,8 +31,12 @@ export interface RuntimeSettingsInput {
   targetUrls: string;
   cronSchedule: string;
   screenshotDir: string;
+  captureMode: string;
   preScreenshotScript: string;
   screenshotFullPage: string;
+  videoDurationSec: string;
+  videoWidth: string;
+  videoHeight: string;
   viewportWidth: string;
   viewportHeight: string;
   pageTimeoutMs: string;
@@ -106,8 +115,12 @@ export function buildDefaultRuntimeSettings(): RuntimeSettings {
     targetUrls: [],
     cronSchedule: "0 * * * *",
     screenshotDir: "/data/screenshots",
+    captureMode: "screenshot",
     preScreenshotScript: "",
     screenshotFullPage: false,
+    videoDurationSec: 15,
+    videoWidth: 960,
+    videoHeight: 540,
     viewportWidth: 1366,
     viewportHeight: 768,
     pageTimeoutMs: 30000,
@@ -126,8 +139,12 @@ export function runtimeSettingsToInput(settings: RuntimeSettings): RuntimeSettin
     targetUrls: settings.targetUrls.join(","),
     cronSchedule: settings.cronSchedule,
     screenshotDir: settings.screenshotDir,
+    captureMode: settings.captureMode,
     preScreenshotScript: settings.preScreenshotScript,
     screenshotFullPage: String(settings.screenshotFullPage),
+    videoDurationSec: String(settings.videoDurationSec),
+    videoWidth: String(settings.videoWidth),
+    videoHeight: String(settings.videoHeight),
     viewportWidth: String(settings.viewportWidth),
     viewportHeight: String(settings.viewportHeight),
     pageTimeoutMs: String(settings.pageTimeoutMs),
@@ -151,8 +168,15 @@ export function parseRuntimeSettingsInput(input: RuntimeSettingsInput): { value?
   }
 
   const screenshotDir = path.resolve((input.screenshotDir || "").trim() || "/data/screenshots");
+  const captureMode = (input.captureMode || "screenshot").trim() as CaptureMode;
+  if (!["screenshot", "video", "both"].includes(captureMode)) {
+    errors.push("CAPTURE_MODE must be screenshot, video, or both");
+  }
   const preScreenshotScript = input.preScreenshotScript || "";
   const screenshotFullPage = parseBoolean(input.screenshotFullPage, "SCREENSHOT_FULL_PAGE", errors);
+  const videoDurationSec = parseIntField(input.videoDurationSec, "VIDEO_DURATION_SEC", 1, errors);
+  const videoWidth = parseIntField(input.videoWidth, "VIDEO_WIDTH", 160, errors);
+  const videoHeight = parseIntField(input.videoHeight, "VIDEO_HEIGHT", 90, errors);
   const viewportWidth = parseIntField(input.viewportWidth, "VIEWPORT_WIDTH", 1, errors);
   const viewportHeight = parseIntField(input.viewportHeight, "VIEWPORT_HEIGHT", 1, errors);
   const pageTimeoutMs = parseIntField(input.pageTimeoutMs, "PAGE_TIMEOUT_MS", 1000, errors);
@@ -182,8 +206,12 @@ export function parseRuntimeSettingsInput(input: RuntimeSettingsInput): { value?
       targetUrls,
       cronSchedule,
       screenshotDir,
+      captureMode,
       preScreenshotScript,
       screenshotFullPage,
+      videoDurationSec,
+      videoWidth,
+      videoHeight,
       viewportWidth,
       viewportHeight,
       pageTimeoutMs,
@@ -204,8 +232,12 @@ export function loadRuntimeSettings(filePath: string): RuntimeSettings | undefin
       return undefined;
     }
     const raw = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(raw) as RuntimeSettings;
-    const normalized = runtimeSettingsToInput(parsed);
+    const parsed = JSON.parse(raw) as Partial<RuntimeSettings>;
+    const merged = {
+      ...buildDefaultRuntimeSettings(),
+      ...parsed
+    } as RuntimeSettings;
+    const normalized = runtimeSettingsToInput(merged);
     const checked = parseRuntimeSettingsInput(normalized);
     return checked.value;
   } catch {
@@ -221,8 +253,12 @@ export function saveRuntimeSettings(filePath: string, envFilePath: string, setti
     `TARGET_URLS=${settings.targetUrls.join(",")}`,
     `CRON_SCHEDULE=${settings.cronSchedule}`,
     `SCREENSHOT_DIR=${settings.screenshotDir}`,
+    `CAPTURE_MODE=${settings.captureMode}`,
     `PRE_SCREENSHOT_SCRIPT=${JSON.stringify(settings.preScreenshotScript)}`,
     `SCREENSHOT_FULL_PAGE=${settings.screenshotFullPage}`,
+    `VIDEO_DURATION_SEC=${settings.videoDurationSec}`,
+    `VIDEO_WIDTH=${settings.videoWidth}`,
+    `VIDEO_HEIGHT=${settings.videoHeight}`,
     `VIEWPORT_WIDTH=${settings.viewportWidth}`,
     `VIEWPORT_HEIGHT=${settings.viewportHeight}`,
     `PAGE_TIMEOUT_MS=${settings.pageTimeoutMs}`,
@@ -248,8 +284,12 @@ export function buildRuntimeSettingsFromEnv(env: NodeJS.ProcessEnv): RuntimeSett
       .filter(Boolean),
     cronSchedule: env.CRON_SCHEDULE?.trim() || defaults.cronSchedule,
     screenshotDir: path.resolve(env.SCREENSHOT_DIR?.trim() || defaults.screenshotDir),
+    captureMode: (env.CAPTURE_MODE?.trim() as CaptureMode) || defaults.captureMode,
     preScreenshotScript: parseEnvString(env.PRE_SCREENSHOT_SCRIPT, defaults.preScreenshotScript),
     screenshotFullPage: ["1", "true", "yes", "y", "on"].includes((env.SCREENSHOT_FULL_PAGE || "").toLowerCase()),
+    videoDurationSec: Number.parseInt(env.VIDEO_DURATION_SEC || `${defaults.videoDurationSec}`, 10),
+    videoWidth: Number.parseInt(env.VIDEO_WIDTH || `${defaults.videoWidth}`, 10),
+    videoHeight: Number.parseInt(env.VIDEO_HEIGHT || `${defaults.videoHeight}`, 10),
     viewportWidth: Number.parseInt(env.VIEWPORT_WIDTH || `${defaults.viewportWidth}`, 10),
     viewportHeight: Number.parseInt(env.VIEWPORT_HEIGHT || `${defaults.viewportHeight}`, 10),
     pageTimeoutMs: Number.parseInt(env.PAGE_TIMEOUT_MS || `${defaults.pageTimeoutMs}`, 10),

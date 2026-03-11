@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { BrowserContext, Page, chromium } from "playwright";
 import sharp from "sharp";
 import type { RunConfig } from "../config";
 import { logger } from "../logger";
 import type { StorageUploader } from "../storage/types";
-import { buildScreenshotFilename, buildScreenshotPath } from "../utils/filename";
+import { buildScreenshotFilename, buildScreenshotPath, buildVideoFilename, buildVideoPath } from "../utils/filename";
 import { withRetry } from "../utils/retry";
 
 export interface UrlRunResult {
@@ -12,6 +13,7 @@ export interface UrlRunResult {
   success: boolean;
   captures: CaptureArtifact[];
   screenshotPath?: string;
+  videoPath?: string;
   uploadedFileId?: string;
   uploadedFileName?: string;
   error?: string;
@@ -19,7 +21,9 @@ export interface UrlRunResult {
 
 interface CaptureArtifact {
   stepName: string;
-  screenshotPath: string;
+  type: "screenshot" | "video";
+  localPath: string;
+  mimeType: string;
   uploadedFileId: string;
   uploadedFileName: string;
 }
@@ -39,6 +43,9 @@ export interface CaptureRunSummary {
 
 const AVIF_QUALITY = 58;
 const AVIF_EFFORT = 4;
+const AV1_CRF = 36;
+const AV1_PRESET = 8;
+const AV1_GOP = 120;
 
 export class ScreenshotService {
   constructor(
@@ -59,7 +66,16 @@ export class ScreenshotService {
       viewport: {
         width: this.config.viewportWidth,
         height: this.config.viewportHeight
-      }
+      },
+      recordVideo: this.shouldCaptureVideo()
+        ? {
+            dir: this.config.screenshotDir,
+            size: {
+              width: this.config.videoWidth,
+              height: this.config.videoHeight
+            }
+          }
+        : undefined
     });
 
     const results: UrlRunResult[] = [];
@@ -76,10 +92,10 @@ export class ScreenshotService {
               captureCount: result.captures.length,
               captures: result.captures
             },
-            "Screenshot(s) captured and uploaded"
+            "Capture artifact(s) captured and uploaded"
           );
         } else {
-          logger.error({ url, error: result.error }, "Screenshot run failed for URL");
+          logger.error({ url, error: result.error }, "Capture run failed for URL");
         }
       }
     } finally {
@@ -101,6 +117,7 @@ export class ScreenshotService {
       await withRetry(
         async () => {
           const page = await context.newPage();
+          const pageVideo = this.shouldCaptureVideo() ? page.video() : null;
           try {
             await page.goto(url, {
               timeout: this.config.pageTimeoutMs,
@@ -110,9 +127,26 @@ export class ScreenshotService {
             await this.waitForStability(page);
 
             const steps = await this.runPreScreenshotScript(page, url);
-            captures = await this.captureStepsForPage(page, url, steps);
+            const collected: CaptureArtifact[] = [];
+
+            if (this.shouldCaptureVideo()) {
+              const videoCapture = await this.captureVideoForPage(page, url);
+              collected.push(videoCapture);
+            }
+
+            if (this.shouldCaptureScreenshot()) {
+              const screenshotCaptures = await this.captureStepsForPage(page, url, steps);
+              collected.push(...screenshotCaptures);
+            }
+
+            captures = collected;
           } finally {
             await page.close();
+          }
+
+          if (pageVideo && this.shouldCaptureVideo()) {
+            const rawVideoPath = await pageVideo.path();
+            captures = await this.finalizeCapturedVideo(captures, url, rawVideoPath);
           }
         },
         {
@@ -138,7 +172,8 @@ export class ScreenshotService {
         url,
         success: true,
         captures,
-        screenshotPath: captures[0]?.screenshotPath,
+        screenshotPath: captures.find((item) => item.type === "screenshot")?.localPath,
+        videoPath: captures.find((item) => item.type === "video")?.localPath,
         uploadedFileId: captures[0]?.uploadedFileId,
         uploadedFileName: captures[0]?.uploadedFileName
       };
@@ -228,13 +263,60 @@ export class ScreenshotService {
 
       captured.push({
         stepName: step.name || `shot-${i + 1}`,
-        screenshotPath,
+        type: "screenshot",
+        localPath: screenshotPath,
+        mimeType: "image/avif",
         uploadedFileId: upload.fileId,
         uploadedFileName: upload.fileName
       });
     }
 
     return captured;
+  }
+
+  private async captureVideoForPage(page: Page, _url: string): Promise<CaptureArtifact> {
+    await page.waitForTimeout(this.config.videoDurationSec * 1000);
+    return {
+      stepName: "video",
+      type: "video",
+      localPath: "",
+      mimeType: "video/mp4",
+      uploadedFileId: "",
+      uploadedFileName: ""
+    };
+  }
+
+  private async finalizeCapturedVideo(
+    captures: CaptureArtifact[],
+    url: string,
+    rawVideoPath: string
+  ): Promise<CaptureArtifact[]> {
+    const index = captures.findIndex((item) => item.type === "video");
+    if (index < 0) return captures;
+
+    const filename = this.buildVideoFilename(url);
+    const videoPath = buildVideoPath(this.config.screenshotDir, filename);
+    await transcodeToAv1Mp4(rawVideoPath, videoPath);
+
+    const upload = await this.uploader.uploadFile({
+      localPath: videoPath,
+      fileName: filename,
+      mimeType: "video/mp4"
+    });
+
+    if (this.config.deleteLocalAfterUpload) {
+      await fs.rm(videoPath, { force: true });
+    }
+    await fs.rm(rawVideoPath, { force: true });
+
+    captures[index] = {
+      ...captures[index],
+      localPath: videoPath,
+      uploadedFileId: upload.fileId,
+      uploadedFileName: upload.fileName
+    };
+
+    return captures;
   }
 
   private async runStepActionScript(page: Page, url: string, step: ScriptCaptureStep, index: number): Promise<void> {
@@ -272,6 +354,74 @@ export class ScreenshotService {
     const safeName = sanitizeFileToken(step.name || `shot-${index + 1}`);
     return `${base}__${safeName}.avif`;
   }
+
+  private buildVideoFilename(url: string): string {
+    return buildVideoFilename(url, new Date()).replace(/\.mp4$/i, "__video-av1.mp4");
+  }
+
+  private shouldCaptureScreenshot(): boolean {
+    return this.config.captureMode === "screenshot" || this.config.captureMode === "both";
+  }
+
+  private shouldCaptureVideo(): boolean {
+    return this.config.captureMode === "video" || this.config.captureMode === "both";
+  }
+}
+
+async function transcodeToAv1Mp4(inputPath: string, outputPath: string): Promise<void> {
+  const args = [
+    "-y",
+    "-i",
+    inputPath,
+    "-c:v",
+    "libsvtav1",
+    "-crf",
+    String(AV1_CRF),
+    "-preset",
+    String(AV1_PRESET),
+    "-g",
+    String(AV1_GOP),
+    "-pix_fmt",
+    "yuv420p",
+    "-an",
+    "-movflags",
+    "+faststart",
+    outputPath
+  ];
+
+  await runCommand("ffmpeg", args);
+}
+
+async function runCommand(command: string, args: string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (stderr.length < 4000) {
+        stderr += chunk.toString("utf-8");
+      }
+    });
+
+    child.on("error", (error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        reject(new Error("ffmpeg is not installed. AV1 video capture requires ffmpeg."));
+        return;
+      }
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const message = stderr.trim().split("\n").slice(-4).join(" | ");
+      reject(new Error(`ffmpeg failed with code ${code}${message ? `: ${message}` : ""}`));
+    });
+  });
 }
 
 function normalizeScriptStep(raw: unknown, index: number): ScriptCaptureStep {

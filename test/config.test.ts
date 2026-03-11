@@ -73,7 +73,11 @@ describe("parseRuntimeSettingsInput", () => {
       preScreenshotScript: "",
       cronSchedule: "0 * * * *",
       screenshotDir: "/data/screenshots",
+      captureMode: "screenshot",
       screenshotFullPage: "false",
+      videoDurationSec: "15",
+      videoWidth: "960",
+      videoHeight: "540",
       viewportWidth: "1366",
       viewportHeight: "768",
       pageTimeoutMs: "30000",
@@ -96,7 +100,11 @@ describe("parseRuntimeSettingsInput", () => {
       preScreenshotScript: "",
       cronSchedule: "0 * * * *",
       screenshotDir: "/data/screenshots",
+      captureMode: "screenshot",
       screenshotFullPage: "false",
+      videoDurationSec: "15",
+      videoWidth: "960",
+      videoHeight: "540",
       viewportWidth: "1366",
       viewportHeight: "768",
       pageTimeoutMs: "30000",
@@ -111,5 +119,33 @@ describe("parseRuntimeSettingsInput", () => {
 
     expect(parsed.value).toBeUndefined();
     expect(parsed.errors.join(" ")).toMatch(/GOOGLE_DRIVE_FOLDER_ID/);
+  });
+
+  it("accepts video capture mode", () => {
+    const parsed = parseRuntimeSettingsInput({
+      targetUrls: "https://example.com",
+      preScreenshotScript: "",
+      cronSchedule: "*/15 * * * *",
+      screenshotDir: "/data/screenshots",
+      captureMode: "video",
+      screenshotFullPage: "false",
+      videoDurationSec: "15",
+      videoWidth: "960",
+      videoHeight: "540",
+      viewportWidth: "1366",
+      viewportHeight: "768",
+      pageTimeoutMs: "30000",
+      extraWaitMs: "0",
+      deleteLocalAfterUpload: "true",
+      retryAttempts: "3",
+      retryBaseDelayMs: "1000",
+      retryMaxDelayMs: "10000",
+      googleDriveMode: "appdata",
+      googleDriveFolderId: ""
+    });
+
+    expect(parsed.errors).toHaveLength(0);
+    expect(parsed.value?.captureMode).toBe("video");
+    expect(parsed.value?.videoDurationSec).toBe(15);
   });
 });

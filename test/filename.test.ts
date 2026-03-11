@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScreenshotFilename } from "../src/utils/filename";
+import { buildScreenshotFilename, buildVideoFilename } from "../src/utils/filename";
 
 describe("buildScreenshotFilename", () => {
   it("generates sanitized UTC timestamped file name", () => {
@@ -16,5 +16,11 @@ describe("buildScreenshotFilename", () => {
 
   it("throws for invalid url", () => {
     expect(() => buildScreenshotFilename("not-a-url")).toThrow(/Invalid URL/);
+  });
+
+  it("builds mp4 names for video capture", () => {
+    const date = new Date("2026-03-10T12:34:56.000Z");
+    const name = buildVideoFilename("https://example.com/some/path?x=1", date);
+    expect(name).toBe("example.com__some-path__20260310T123456Z.mp4");
   });
 });

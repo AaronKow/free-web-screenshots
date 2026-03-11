@@ -157,15 +157,19 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
   function renderForm(settingsInput: RuntimeSettingsInput, error?: string, notice?: string, noticeType?: string): string {
     return htmlPage(
       "Setup",
-      `<div class="card"><h1>Initial Setup</h1><p>Configure screenshot behavior, then initialize OAuth.</p>
+      `<div class="card"><h1>Initial Setup</h1><p>Configure capture behavior, then initialize OAuth.</p>
       ${notice ? `<p class="badge ${noticeType === "error" ? "warn" : ""}">${escapeHtml(notice)}</p>` : ""}
       ${error ? `<p class="badge warn">${escapeHtml(error)}</p>` : ""}
       <form method="post" action="/setup/save"><div class="grid">
       <div class="full"><label>TARGET_URLS (comma-separated)</label><textarea name="targetUrls" required>${escapeHtml(settingsInput.targetUrls)}</textarea></div>
+      <div><label>CAPTURE_MODE</label><select name="captureMode"><option value="screenshot" ${settingsInput.captureMode === "screenshot" ? "selected" : ""}>screenshot</option><option value="video" ${settingsInput.captureMode === "video" ? "selected" : ""}>video</option><option value="both" ${settingsInput.captureMode === "both" ? "selected" : ""}>both</option></select></div>
       <div class="full"><label>PRE_SCREENSHOT_SCRIPT (optional browser JavaScript; return array for multi-shot)</label><textarea name="preScreenshotScript" placeholder="return [{ name: 'hero', actionScript: \"window.scrollTo(0, 0)\", waitMs: 400 }, { name: 'pricing', actionScript: \"document.querySelector('#pricing')?.scrollIntoView()\", waitMs: 600 }];">${escapeHtml(settingsInput.preScreenshotScript)}</textarea></div>
       <div><label>CRON_SCHEDULE</label><input name="cronSchedule" value="${escapeHtml(settingsInput.cronSchedule)}" required /></div>
       <div><label>SCREENSHOT_DIR</label><input name="screenshotDir" value="${escapeHtml(settingsInput.screenshotDir)}" required /></div>
       <div><label>SCREENSHOT_FULL_PAGE</label><select name="screenshotFullPage"><option value="false" ${settingsInput.screenshotFullPage === "false" ? "selected" : ""}>false</option><option value="true" ${settingsInput.screenshotFullPage === "true" ? "selected" : ""}>true</option></select></div>
+      <div><label>VIDEO_DURATION_SEC</label><input name="videoDurationSec" value="${escapeHtml(settingsInput.videoDurationSec)}" required /></div>
+      <div><label>VIDEO_WIDTH</label><input name="videoWidth" value="${escapeHtml(settingsInput.videoWidth)}" required /></div>
+      <div><label>VIDEO_HEIGHT</label><input name="videoHeight" value="${escapeHtml(settingsInput.videoHeight)}" required /></div>
       <div><label>VIEWPORT_WIDTH</label><input name="viewportWidth" value="${escapeHtml(settingsInput.viewportWidth)}" required /></div>
       <div><label>VIEWPORT_HEIGHT</label><input name="viewportHeight" value="${escapeHtml(settingsInput.viewportHeight)}" required /></div>
       <div><label>PAGE_TIMEOUT_MS</label><input name="pageTimeoutMs" value="${escapeHtml(settingsInput.pageTimeoutMs)}" required /></div>
@@ -191,7 +195,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
 
     return htmlPage(
       "Dashboard",
-      `<div class="card"><h1>Screenshot Dashboard</h1>
+      `<div class="card"><h1>Capture Dashboard</h1>
       <p>Runtime status and scheduler controls.</p>
       ${notice ? `<p><span class="badge ${noticeType === "error" ? "warn" : ""}">${escapeHtml(notice)}</span></p>` : ""}
       <p><span class="badge ${hasRefreshToken ? "" : "warn"}">${hasRefreshToken ? "OAuth ready" : "OAuth setup required"}</span></p>
@@ -202,7 +206,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       <div><label>Scheduler Active</label><div class="mono">${metrics.schedulerActive}</div></div>
       </div>
       <div class="btns">
-        <form method="post" action="/screenshot/now"><button type="submit">Screenshot Now</button></form>
+        <form method="post" action="/screenshot/now"><button type="submit">Run Capture Now</button></form>
         <form method="post" action="/scheduler/restart"><button class="secondary" type="submit">Restart Scheduler</button></form>
         <a class="btn secondary" href="/logout">Logout</a>
       </div>
@@ -210,10 +214,14 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       <div class="card"><h1>Update Configuration</h1><p>Save and restart worker with new settings.</p>
       <form method="post" action="/setup/save"><div class="grid">
       <div class="full"><label>TARGET_URLS</label><textarea name="targetUrls" required>${escapeHtml(settingsInput.targetUrls)}</textarea></div>
+      <div><label>CAPTURE_MODE</label><select name="captureMode"><option value="screenshot" ${settingsInput.captureMode === "screenshot" ? "selected" : ""}>screenshot</option><option value="video" ${settingsInput.captureMode === "video" ? "selected" : ""}>video</option><option value="both" ${settingsInput.captureMode === "both" ? "selected" : ""}>both</option></select></div>
       <div class="full"><label>PRE_SCREENSHOT_SCRIPT (optional browser JavaScript; return array for multi-shot)</label><textarea name="preScreenshotScript" placeholder="return [{ name: 'hero', actionScript: \"window.scrollTo(0, 0)\", waitMs: 400 }, { name: 'pricing', actionScript: \"document.querySelector('#pricing')?.scrollIntoView()\", waitMs: 600 }];">${escapeHtml(settingsInput.preScreenshotScript)}</textarea></div>
       <div><label>CRON_SCHEDULE</label><input name="cronSchedule" value="${escapeHtml(settingsInput.cronSchedule)}" required /></div>
       <div><label>SCREENSHOT_DIR</label><input name="screenshotDir" value="${escapeHtml(settingsInput.screenshotDir)}" required /></div>
       <div><label>SCREENSHOT_FULL_PAGE</label><select name="screenshotFullPage"><option value="false" ${settingsInput.screenshotFullPage === "false" ? "selected" : ""}>false</option><option value="true" ${settingsInput.screenshotFullPage === "true" ? "selected" : ""}>true</option></select></div>
+      <div><label>VIDEO_DURATION_SEC</label><input name="videoDurationSec" value="${escapeHtml(settingsInput.videoDurationSec)}" required /></div>
+      <div><label>VIDEO_WIDTH</label><input name="videoWidth" value="${escapeHtml(settingsInput.videoWidth)}" required /></div>
+      <div><label>VIDEO_HEIGHT</label><input name="videoHeight" value="${escapeHtml(settingsInput.videoHeight)}" required /></div>
       <div><label>VIEWPORT_WIDTH</label><input name="viewportWidth" value="${escapeHtml(settingsInput.viewportWidth)}" required /></div>
       <div><label>VIEWPORT_HEIGHT</label><input name="viewportHeight" value="${escapeHtml(settingsInput.viewportHeight)}" required /></div>
       <div><label>PAGE_TIMEOUT_MS</label><input name="pageTimeoutMs" value="${escapeHtml(settingsInput.pageTimeoutMs)}" required /></div>
@@ -298,10 +306,14 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       const form = new URLSearchParams(body);
       const parsed = parseRuntimeSettingsInput({
         targetUrls: form.get("targetUrls") || "",
+        captureMode: form.get("captureMode") || "screenshot",
         preScreenshotScript: form.get("preScreenshotScript") || "",
         cronSchedule: form.get("cronSchedule") || "",
         screenshotDir: form.get("screenshotDir") || "",
         screenshotFullPage: form.get("screenshotFullPage") || "false",
+        videoDurationSec: form.get("videoDurationSec") || "",
+        videoWidth: form.get("videoWidth") || "",
+        videoHeight: form.get("videoHeight") || "",
         viewportWidth: form.get("viewportWidth") || "",
         viewportHeight: form.get("viewportHeight") || "",
         pageTimeoutMs: form.get("pageTimeoutMs") || "",
@@ -318,10 +330,14 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
         res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
         res.end(renderForm({
           targetUrls: form.get("targetUrls") || "",
+          captureMode: form.get("captureMode") || "screenshot",
           preScreenshotScript: form.get("preScreenshotScript") || "",
           cronSchedule: form.get("cronSchedule") || "",
           screenshotDir: form.get("screenshotDir") || "",
           screenshotFullPage: form.get("screenshotFullPage") || "false",
+          videoDurationSec: form.get("videoDurationSec") || "",
+          videoWidth: form.get("videoWidth") || "",
+          videoHeight: form.get("videoHeight") || "",
           viewportWidth: form.get("viewportWidth") || "",
           viewportHeight: form.get("viewportHeight") || "",
           pageTimeoutMs: form.get("pageTimeoutMs") || "",
@@ -362,10 +378,10 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       if (!requireAuth(req, res)) return true;
       try {
         await deps.triggerScreenshotNow();
-        res.writeHead(302, { location: buildNoticeRedirect("Screenshot run completed successfully.", "success") });
+        res.writeHead(302, { location: buildNoticeRedirect("Capture run completed successfully.", "success") });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Screenshot run failed";
-        res.writeHead(302, { location: buildNoticeRedirect(`Screenshot run failed: ${message}`, "error") });
+        const message = error instanceof Error ? error.message : "Capture run failed";
+        res.writeHead(302, { location: buildNoticeRedirect(`Capture run failed: ${message}`, "error") });
       }
       res.end();
       return true;

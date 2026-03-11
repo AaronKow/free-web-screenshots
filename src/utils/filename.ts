@@ -16,7 +16,7 @@ function utcTimestamp(date: Date): string {
   return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
-export function buildScreenshotFilename(url: string, date = new Date()): string {
+function buildCaptureBaseName(url: string, date = new Date()): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -30,12 +30,26 @@ export function buildScreenshotFilename(url: string, date = new Date()): string 
 
   const base = `${host}__${pathPart}__${ts}`;
   const trimmedBase = base.slice(0, MAX_BASENAME_LENGTH);
-  const safe = trimmedBase || "screenshot";
+  return trimmedBase || "capture";
+}
+
+export function buildScreenshotFilename(url: string, date = new Date()): string {
+  const safe = buildCaptureBaseName(url, date);
 
   return `${safe}.avif`;
+}
+
+export function buildVideoFilename(url: string, date = new Date()): string {
+  const safe = buildCaptureBaseName(url, date);
+  return `${safe}.mp4`;
 }
 
 export function buildScreenshotPath(dir: string, filename: string): string {
   const safe = sanitizePart(path.basename(filename, path.extname(filename)));
   return path.join(dir, `${safe || "screenshot"}.avif`);
+}
+
+export function buildVideoPath(dir: string, filename: string): string {
+  const safe = sanitizePart(path.basename(filename, path.extname(filename)));
+  return path.join(dir, `${safe || "video"}.mp4`);
 }
