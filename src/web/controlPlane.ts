@@ -41,8 +41,21 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function setCookie(res: ServerResponse, name: string, value: string, maxAgeSec: number): void {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+function isHttpsRequest(req: IncomingMessage): boolean {
+  const encrypted = (req.socket as IncomingMessage["socket"] & { encrypted?: boolean }).encrypted;
+  if (encrypted) return true;
+  const forwardedProto = (req.headers["x-forwarded-proto"] || "").toString().split(",")[0].trim().toLowerCase();
+  return forwardedProto === "https";
+}
+
+function setCookie(
+  req: IncomingMessage,
+  res: ServerResponse,
+  name: string,
+  value: string,
+  maxAgeSec: number
+): void {
+  const secure = isHttpsRequest(req) ? "; Secure" : "";
   res.setHeader("Set-Cookie", `${name}=${value}; Max-Age=${maxAgeSec}; Path=/; HttpOnly; SameSite=Strict${secure}`);
 }
 
@@ -244,7 +257,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
 
       const token = crypto.randomBytes(24).toString("base64url");
       sessions.set(token, { user: username, expiresAt: Date.now() + SESSION_TTL_MS });
-      setCookie(res, "app_session", token, Math.floor(SESSION_TTL_MS / 1000));
+      setCookie(req, res, "app_session", token, Math.floor(SESSION_TTL_MS / 1000));
       res.writeHead(302, { location: "/" });
       res.end();
       return true;

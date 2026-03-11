@@ -393,6 +393,9 @@ Response includes:
    - Revoke prior app access, re-run setup (OAuth uses `offline` + `consent`).
 5. Visible-folder upload errors:
    - Verify `GOOGLE_DRIVE_FOLDER_ID` and account permissions.
+6. Login keeps returning to `/login` even with correct credentials:
+   - If you are on plain `http://`, ensure your app version includes request-aware cookie security (`Secure` only on HTTPS/X-Forwarded-Proto=https).
+   - If using HTTPS behind Nginx, keep `proxy_set_header X-Forwarded-Proto $scheme;` in the server block.
 
 ## Testing
 
