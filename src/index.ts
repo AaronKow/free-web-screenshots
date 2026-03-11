@@ -204,11 +204,11 @@ async function main(): Promise<void> {
     saveSettings,
     restartScheduler: startScheduler,
     triggerScreenshotNow,
-    getOauthAuthorizationUrl: () => {
+    getOauthAuthorizationUrl: (req) => {
       if (!oauthSetupHandler) {
         throw new Error("OAuth setup is disabled");
       }
-      return oauthSetupHandler.createAuthorizationUrl();
+      return oauthSetupHandler.createAuthorizationUrl(req);
     }
   });
 

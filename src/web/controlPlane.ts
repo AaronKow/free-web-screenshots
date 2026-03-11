@@ -22,7 +22,7 @@ interface ControlPlaneDeps {
   saveSettings: (settings: RuntimeSettings) => Promise<void>;
   restartScheduler: () => Promise<void>;
   triggerScreenshotNow: () => Promise<void>;
-  getOauthAuthorizationUrl: () => string;
+  getOauthAuthorizationUrl: (req: IncomingMessage) => string;
 }
 
 interface SessionRecord {
@@ -373,7 +373,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
 
     if (req.method === "GET" && url.pathname === deps.config.oauthSetupPath) {
       if (!requireAuth(req, res)) return true;
-      res.writeHead(302, { location: deps.getOauthAuthorizationUrl() });
+      res.writeHead(302, { location: deps.getOauthAuthorizationUrl(req) });
       res.end();
       return true;
     }

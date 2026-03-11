@@ -77,6 +77,24 @@ function getScope(mode: GoogleDriveMode): string {
   return mode === "appdata" ? APP_DATA_SCOPE : VISIBLE_FOLDER_SCOPE;
 }
 
+function resolvePublicBaseUrl(req: IncomingMessage, fallbackBaseUrl?: string): string {
+  const forwardedProto = (req.headers["x-forwarded-proto"] || "").toString().split(",")[0].trim().toLowerCase();
+  const forwardedHost = (req.headers["x-forwarded-host"] || "").toString().split(",")[0].trim();
+  const host = forwardedHost || (req.headers.host || "").toString().trim();
+  const encrypted = (req.socket as IncomingMessage["socket"] & { encrypted?: boolean }).encrypted;
+  const scheme = forwardedProto || (encrypted ? "https" : "http");
+
+  if (host) {
+    return `${scheme}://${host}`;
+  }
+
+  if (fallbackBaseUrl) {
+    return fallbackBaseUrl;
+  }
+
+  return "http://localhost:8080";
+}
+
 export class OAuthSetupHandler {
   constructor(
     private readonly config: AppConfig,
@@ -84,11 +102,12 @@ export class OAuthSetupHandler {
     private readonly onRefreshToken: (refreshToken: string) => Promise<void>
   ) {}
 
-  createAuthorizationUrl(): string {
+  createAuthorizationUrl(req: IncomingMessage): string {
+    const redirectUri = new URL(this.config.oauthCallbackPath, resolvePublicBaseUrl(req, this.config.appBaseUrl)).toString();
     const oauth2 = new auth.OAuth2(
       this.config.googleClientId,
       this.config.googleClientSecret,
-      this.config.googleRedirectUri
+      redirectUri
     );
 
     const state = buildState(this.config.oauthStateSecret || "");
@@ -131,10 +150,11 @@ export class OAuthSetupHandler {
     }
 
     try {
+      const redirectUri = new URL(this.config.oauthCallbackPath, resolvePublicBaseUrl(req, this.config.appBaseUrl)).toString();
       const oauth2 = new auth.OAuth2(
         this.config.googleClientId,
         this.config.googleClientSecret,
-        this.config.googleRedirectUri
+        redirectUri
       );
 
       const { tokens } = await oauth2.getToken(code);
