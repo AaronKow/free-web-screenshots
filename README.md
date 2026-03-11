@@ -118,7 +118,7 @@ See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.
 
 - `GOOGLE_CLIENT_ID` (required)
 - `GOOGLE_CLIENT_SECRET` (required)
-- `GOOGLE_REDIRECT_URI` (required)
+- `GOOGLE_REDIRECT_URI` (required unless `OAUTH_SETUP_ENABLED=true` with valid `APP_BASE_URL`; then derived as `APP_BASE_URL + OAUTH_CALLBACK_PATH`)
 - `GOOGLE_REFRESH_TOKEN` (optional if using setup flow + token file)
 - `GOOGLE_TOKEN_FILE` (recommended; required for hosted setup)
 - `GOOGLE_CREDENTIALS_FILE` (optional)

@@ -159,10 +159,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     env.GOOGLE_CLIENT_SECRET?.trim() ||
     credentialsFromFile.client_secret ||
     required(undefined, "GOOGLE_CLIENT_SECRET", errors);
-  const googleRedirectUri =
-    env.GOOGLE_REDIRECT_URI?.trim() ||
-    credentialsFromFile.redirect_uri ||
-    required(undefined, "GOOGLE_REDIRECT_URI", errors);
+  const googleRedirectUriFromEnv = env.GOOGLE_REDIRECT_URI?.trim();
 
   const googleRefreshToken = env.GOOGLE_REFRESH_TOKEN?.trim() || tokenFromFile.refreshToken;
 
@@ -187,6 +184,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const appBaseUrl = env.APP_BASE_URL?.trim();
   const oauthStateSecret = env.OAUTH_STATE_SECRET?.trim();
+  let googleRedirectUri = googleRedirectUriFromEnv || credentialsFromFile.redirect_uri || "";
 
   if (oauthSetupEnabled) {
     if (!tokenFromFile.tokenFile) {
@@ -209,13 +207,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         }
 
         const expectedRedirect = new URL(oauthCallbackPath, parsedBase).toString();
-        if (googleRedirectUri && googleRedirectUri !== expectedRedirect) {
+        // In hosted setup mode, callback should follow deployment URL.
+        // We still fail fast if user explicitly sets a conflicting redirect URI.
+        if (googleRedirectUriFromEnv && googleRedirectUriFromEnv !== expectedRedirect) {
           errors.push(`GOOGLE_REDIRECT_URI must equal ${expectedRedirect} when OAUTH_SETUP_ENABLED=true`);
         }
+        googleRedirectUri = expectedRedirect;
       } catch {
         errors.push("APP_BASE_URL must be a valid URL");
       }
     }
+  }
+
+  if (!googleRedirectUri) {
+    errors.push("GOOGLE_REDIRECT_URI is required");
   }
 
   const appUser = env.APP_USER?.trim();
