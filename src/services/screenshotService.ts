@@ -167,7 +167,10 @@ export class ScreenshotService {
     try {
       const output = await page.evaluate(
         async (payload: { source: string; context: { url: string } }) => {
-          const run = new Function("context", payload.source);
+          const AsyncFunction = Object.getPrototypeOf(async function () {
+            return undefined;
+          }).constructor as new (...args: string[]) => (context: { url: string }) => Promise<unknown>;
+          const run = new AsyncFunction("context", payload.source);
           return await Promise.resolve(run(payload.context));
         },
         {
@@ -241,7 +244,12 @@ export class ScreenshotService {
     try {
       await page.evaluate(
         async (payload: { source: string; context: { url: string; stepIndex: number; stepName: string } }) => {
-          const run = new Function("context", payload.source);
+          const AsyncFunction = Object.getPrototypeOf(async function () {
+            return undefined;
+          }).constructor as new (
+            ...args: string[]
+          ) => (context: { url: string; stepIndex: number; stepName: string }) => Promise<unknown>;
+          const run = new AsyncFunction("context", payload.source);
           await Promise.resolve(run(payload.context));
         },
         {
