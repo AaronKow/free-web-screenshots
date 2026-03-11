@@ -325,7 +325,7 @@ Example server block:
 ```nginx
 server {
   listen 80;
-  server_name screenshots.example.com;
+  server_name screenshots.example.com; # or "_" if you are testing via server IP only
 
   location / {
     proxy_pass http://127.0.0.1:8080;
@@ -342,11 +342,18 @@ Ubuntu/Debian enable flow:
 
 ```bash
 sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/free-web-screenshots
-# edit /etc/nginx/sites-available/free-web-screenshots with the server block above
+# create /etc/nginx/sites-available/free-web-screenshots with the server block above
 sudo ln -sf /etc/nginx/sites-available/free-web-screenshots /etc/nginx/sites-enabled/free-web-screenshots
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+If you still see the Nginx welcome page, check these first:
+
+- `server_name` mismatch: browsing by IP will not match `server_name screenshots.example.com`; use your real domain, or set `server_name _;` for IP-only testing.
+- default site still enabled: make sure `/etc/nginx/sites-enabled/default` is removed.
+- wrong vhost selected: run `sudo nginx -T | sed -n '/server_name/,/}/p'` and confirm your proxy block is loaded.
 
 Optional hardening:
 
