@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "free-web-screenshots",
-      script: "dist/index.js",
+      script: "dist/src/index.js",
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
