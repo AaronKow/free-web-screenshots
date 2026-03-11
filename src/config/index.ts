@@ -24,6 +24,7 @@ export interface RunConfig {
   targetUrls: string[];
   cronSchedule: string;
   screenshotDir: string;
+  preScreenshotScript: string;
   screenshotFullPage: boolean;
   viewportWidth: number;
   viewportHeight: number;

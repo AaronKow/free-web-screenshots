@@ -8,6 +8,7 @@ export interface RuntimeSettings {
   targetUrls: string[];
   cronSchedule: string;
   screenshotDir: string;
+  preScreenshotScript: string;
   screenshotFullPage: boolean;
   viewportWidth: number;
   viewportHeight: number;
@@ -25,6 +26,7 @@ export interface RuntimeSettingsInput {
   targetUrls: string;
   cronSchedule: string;
   screenshotDir: string;
+  preScreenshotScript: string;
   screenshotFullPage: string;
   viewportWidth: string;
   viewportHeight: string;
@@ -83,11 +85,28 @@ function parseUrls(raw: string, errors: string[]): string[] {
   return urls;
 }
 
+function parseEnvString(raw: string | undefined, fallback: string): string {
+  if (raw == null) return fallback;
+  const trimmed = raw.trim();
+  if (!trimmed) return fallback;
+
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+
+  return raw;
+}
+
 export function buildDefaultRuntimeSettings(): RuntimeSettings {
   return {
     targetUrls: [],
     cronSchedule: "0 * * * *",
     screenshotDir: "/data/screenshots",
+    preScreenshotScript: "",
     screenshotFullPage: false,
     viewportWidth: 1366,
     viewportHeight: 768,
@@ -107,6 +126,7 @@ export function runtimeSettingsToInput(settings: RuntimeSettings): RuntimeSettin
     targetUrls: settings.targetUrls.join(","),
     cronSchedule: settings.cronSchedule,
     screenshotDir: settings.screenshotDir,
+    preScreenshotScript: settings.preScreenshotScript,
     screenshotFullPage: String(settings.screenshotFullPage),
     viewportWidth: String(settings.viewportWidth),
     viewportHeight: String(settings.viewportHeight),
@@ -131,6 +151,7 @@ export function parseRuntimeSettingsInput(input: RuntimeSettingsInput): { value?
   }
 
   const screenshotDir = path.resolve((input.screenshotDir || "").trim() || "/data/screenshots");
+  const preScreenshotScript = input.preScreenshotScript || "";
   const screenshotFullPage = parseBoolean(input.screenshotFullPage, "SCREENSHOT_FULL_PAGE", errors);
   const viewportWidth = parseIntField(input.viewportWidth, "VIEWPORT_WIDTH", 1, errors);
   const viewportHeight = parseIntField(input.viewportHeight, "VIEWPORT_HEIGHT", 1, errors);
@@ -161,6 +182,7 @@ export function parseRuntimeSettingsInput(input: RuntimeSettingsInput): { value?
       targetUrls,
       cronSchedule,
       screenshotDir,
+      preScreenshotScript,
       screenshotFullPage,
       viewportWidth,
       viewportHeight,
@@ -199,6 +221,7 @@ export function saveRuntimeSettings(filePath: string, envFilePath: string, setti
     `TARGET_URLS=${settings.targetUrls.join(",")}`,
     `CRON_SCHEDULE=${settings.cronSchedule}`,
     `SCREENSHOT_DIR=${settings.screenshotDir}`,
+    `PRE_SCREENSHOT_SCRIPT=${JSON.stringify(settings.preScreenshotScript)}`,
     `SCREENSHOT_FULL_PAGE=${settings.screenshotFullPage}`,
     `VIEWPORT_WIDTH=${settings.viewportWidth}`,
     `VIEWPORT_HEIGHT=${settings.viewportHeight}`,
@@ -225,6 +248,7 @@ export function buildRuntimeSettingsFromEnv(env: NodeJS.ProcessEnv): RuntimeSett
       .filter(Boolean),
     cronSchedule: env.CRON_SCHEDULE?.trim() || defaults.cronSchedule,
     screenshotDir: path.resolve(env.SCREENSHOT_DIR?.trim() || defaults.screenshotDir),
+    preScreenshotScript: parseEnvString(env.PRE_SCREENSHOT_SCRIPT, defaults.preScreenshotScript),
     screenshotFullPage: ["1", "true", "yes", "y", "on"].includes((env.SCREENSHOT_FULL_PAGE || "").toLowerCase()),
     viewportWidth: Number.parseInt(env.VIEWPORT_WIDTH || `${defaults.viewportWidth}`, 10),
     viewportHeight: Number.parseInt(env.VIEWPORT_HEIGHT || `${defaults.viewportHeight}`, 10),

@@ -61,6 +61,7 @@ describe("parseRuntimeSettingsInput", () => {
   it("accepts valid settings", () => {
     const parsed = parseRuntimeSettingsInput({
       targetUrls: "https://example.com,https://example.org",
+      preScreenshotScript: "",
       cronSchedule: "0 * * * *",
       screenshotDir: "/data/screenshots",
       screenshotFullPage: "false",
@@ -83,6 +84,7 @@ describe("parseRuntimeSettingsInput", () => {
   it("rejects visible-folder without folder id", () => {
     const parsed = parseRuntimeSettingsInput({
       targetUrls: "https://example.com",
+      preScreenshotScript: "",
       cronSchedule: "0 * * * *",
       screenshotDir: "/data/screenshots",
       screenshotFullPage: "false",

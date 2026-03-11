@@ -9,10 +9,25 @@ import { withRetry } from "../utils/retry";
 export interface UrlRunResult {
   url: string;
   success: boolean;
+  captures: CaptureArtifact[];
   screenshotPath?: string;
   uploadedFileId?: string;
   uploadedFileName?: string;
   error?: string;
+}
+
+interface CaptureArtifact {
+  stepName: string;
+  screenshotPath: string;
+  uploadedFileId: string;
+  uploadedFileName: string;
+}
+
+interface ScriptCaptureStep {
+  name?: string;
+  actionScript?: string;
+  waitMs?: number;
+  fullPage?: boolean;
 }
 
 export interface CaptureRunSummary {
@@ -54,11 +69,10 @@ export class ScreenshotService {
           logger.info(
             {
               url,
-              screenshotPath: result.screenshotPath,
-              uploadedFileId: result.uploadedFileId,
-              uploadedFileName: result.uploadedFileName
+              captureCount: result.captures.length,
+              captures: result.captures
             },
-            "Screenshot captured and uploaded"
+            "Screenshot(s) captured and uploaded"
           );
         } else {
           logger.error({ url, error: result.error }, "Screenshot run failed for URL");
@@ -77,10 +91,9 @@ export class ScreenshotService {
   }
 
   private async processUrl(context: BrowserContext, url: string): Promise<UrlRunResult> {
-    const filename = buildScreenshotFilename(url, new Date());
-    const screenshotPath = buildScreenshotPath(this.config.screenshotDir, filename);
-
     try {
+      let captures: CaptureArtifact[] = [];
+
       await withRetry(
         async () => {
           const page = await context.newPage();
@@ -92,15 +105,8 @@ export class ScreenshotService {
 
             await this.waitForStability(page);
 
-            if (this.config.extraWaitMs > 0) {
-              await page.waitForTimeout(this.config.extraWaitMs);
-            }
-
-            await page.screenshot({
-              path: screenshotPath,
-              fullPage: this.config.screenshotFullPage,
-              type: "png"
-            });
+            const steps = await this.runPreScreenshotScript(page, url);
+            captures = await this.captureStepsForPage(page, url, steps);
           } finally {
             await page.close();
           }
@@ -124,28 +130,19 @@ export class ScreenshotService {
         }
       );
 
-      const upload = await this.uploader.uploadFile({
-        localPath: screenshotPath,
-        fileName: filename,
-        mimeType: "image/png"
-      });
-
-      if (this.config.deleteLocalAfterUpload) {
-        await fs.rm(screenshotPath, { force: true });
-      }
-
       return {
         url,
         success: true,
-        screenshotPath,
-        uploadedFileId: upload.fileId,
-        uploadedFileName: upload.fileName
+        captures,
+        screenshotPath: captures[0]?.screenshotPath,
+        uploadedFileId: captures[0]?.uploadedFileId,
+        uploadedFileName: captures[0]?.uploadedFileName
       };
     } catch (error) {
       return {
         url,
         success: false,
-        screenshotPath,
+        captures: [],
         error: error instanceof Error ? error.message : String(error)
       };
     }
@@ -158,6 +155,154 @@ export class ScreenshotService {
       logger.warn("Timed out waiting for network idle; proceeding with screenshot");
     }
   }
+
+  private async runPreScreenshotScript(page: Page, url: string): Promise<ScriptCaptureStep[]> {
+    const script = this.config.preScreenshotScript.trim();
+    if (!script) return [];
+
+    try {
+      const output = await page.evaluate(
+        async (payload: { source: string; context: { url: string } }) => {
+          const run = new Function("context", payload.source);
+          return await Promise.resolve(run(payload.context));
+        },
+        {
+          source: script,
+          context: { url }
+        }
+      );
+      if (!Array.isArray(output)) {
+        return [];
+      }
+
+      return output.map((step, index) => normalizeScriptStep(step, index));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`PRE_SCREENSHOT_SCRIPT failed for ${url}: ${message}`);
+    }
+  }
+
+  private async captureStepsForPage(page: Page, url: string, scriptSteps: ScriptCaptureStep[]): Promise<CaptureArtifact[]> {
+    const steps = scriptSteps.length > 0 ? scriptSteps : [{ name: "default" }];
+    const captured: CaptureArtifact[] = [];
+
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
+
+      if (step.actionScript?.trim()) {
+        await this.runStepActionScript(page, url, step, i);
+      }
+
+      const waitMs = step.waitMs ?? this.config.extraWaitMs;
+      if (waitMs > 0) {
+        await page.waitForTimeout(waitMs);
+      }
+
+      const filename = this.buildStepFilename(url, step, i);
+      const screenshotPath = buildScreenshotPath(this.config.screenshotDir, filename);
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage: step.fullPage ?? this.config.screenshotFullPage,
+        type: "png"
+      });
+
+      const upload = await this.uploader.uploadFile({
+        localPath: screenshotPath,
+        fileName: filename,
+        mimeType: "image/png"
+      });
+
+      if (this.config.deleteLocalAfterUpload) {
+        await fs.rm(screenshotPath, { force: true });
+      }
+
+      captured.push({
+        stepName: step.name || `shot-${i + 1}`,
+        screenshotPath,
+        uploadedFileId: upload.fileId,
+        uploadedFileName: upload.fileName
+      });
+    }
+
+    return captured;
+  }
+
+  private async runStepActionScript(page: Page, url: string, step: ScriptCaptureStep, index: number): Promise<void> {
+    const script = step.actionScript?.trim();
+    if (!script) return;
+
+    try {
+      await page.evaluate(
+        async (payload: { source: string; context: { url: string; stepIndex: number; stepName: string } }) => {
+          const run = new Function("context", payload.source);
+          await Promise.resolve(run(payload.context));
+        },
+        {
+          source: script,
+          context: {
+            url,
+            stepIndex: index,
+            stepName: step.name || `shot-${index + 1}`
+          }
+        }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`PRE_SCREENSHOT_SCRIPT step ${index + 1} actionScript failed for ${url}: ${message}`);
+    }
+  }
+
+  private buildStepFilename(url: string, step: ScriptCaptureStep, index: number): string {
+    const base = buildScreenshotFilename(url, new Date()).replace(/\.png$/i, "");
+    const safeName = sanitizeFileToken(step.name || `shot-${index + 1}`);
+    return `${base}__${safeName}.png`;
+  }
+}
+
+function normalizeScriptStep(raw: unknown, index: number): ScriptCaptureStep {
+  if (raw == null || typeof raw !== "object") {
+    throw new Error(`PRE_SCREENSHOT_SCRIPT step ${index + 1} must be an object`);
+  }
+
+  const step = raw as Record<string, unknown>;
+  const name =
+    typeof step.name === "string" && step.name.trim().length > 0 ? step.name.trim().slice(0, 60) : `shot-${index + 1}`;
+
+  const actionScript =
+    typeof step.actionScript === "string" && step.actionScript.trim().length > 0 ? step.actionScript : undefined;
+
+  const waitMs = normalizeWait(step.waitMs, index);
+  const fullPage = typeof step.fullPage === "boolean" ? step.fullPage : undefined;
+
+  return {
+    name,
+    actionScript,
+    waitMs,
+    fullPage
+  };
+}
+
+function normalizeWait(raw: unknown, index: number): number | undefined {
+  if (raw == null) return undefined;
+  const value = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`PRE_SCREENSHOT_SCRIPT step ${index + 1} waitMs must be a non-negative number`);
+  }
+  if (value > 120000) {
+    throw new Error(`PRE_SCREENSHOT_SCRIPT step ${index + 1} waitMs cannot exceed 120000`);
+  }
+  return Math.floor(value);
+}
+
+function sanitizeFileToken(value: string): string {
+  return (
+    value
+      .normalize("NFKC")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[-_.]+|[-_.]+$/g, "")
+      .toLowerCase() || "shot"
+  );
 }
 
 function isRetryablePageError(error: unknown): boolean {

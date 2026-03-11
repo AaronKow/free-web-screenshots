@@ -149,6 +149,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       ${error ? `<p class="badge warn">${escapeHtml(error)}</p>` : ""}
       <form method="post" action="/setup/save"><div class="grid">
       <div class="full"><label>TARGET_URLS (comma-separated)</label><textarea name="targetUrls" required>${escapeHtml(settingsInput.targetUrls)}</textarea></div>
+      <div class="full"><label>PRE_SCREENSHOT_SCRIPT (optional browser JavaScript; return array for multi-shot)</label><textarea name="preScreenshotScript" placeholder="return [{ name: 'hero', actionScript: \"window.scrollTo(0, 0)\", waitMs: 400 }, { name: 'pricing', actionScript: \"document.querySelector('#pricing')?.scrollIntoView()\", waitMs: 600 }];">${escapeHtml(settingsInput.preScreenshotScript)}</textarea></div>
       <div><label>CRON_SCHEDULE</label><input name="cronSchedule" value="${escapeHtml(settingsInput.cronSchedule)}" required /></div>
       <div><label>SCREENSHOT_DIR</label><input name="screenshotDir" value="${escapeHtml(settingsInput.screenshotDir)}" required /></div>
       <div><label>SCREENSHOT_FULL_PAGE</label><select name="screenshotFullPage"><option value="false" ${settingsInput.screenshotFullPage === "false" ? "selected" : ""}>false</option><option value="true" ${settingsInput.screenshotFullPage === "true" ? "selected" : ""}>true</option></select></div>
@@ -196,6 +197,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       <div class="card"><h1>Update Configuration</h1><p>Save and restart worker with new settings.</p>
       <form method="post" action="/setup/save"><div class="grid">
       <div class="full"><label>TARGET_URLS</label><textarea name="targetUrls" required>${escapeHtml(settingsInput.targetUrls)}</textarea></div>
+      <div class="full"><label>PRE_SCREENSHOT_SCRIPT (optional browser JavaScript; return array for multi-shot)</label><textarea name="preScreenshotScript" placeholder="return [{ name: 'hero', actionScript: \"window.scrollTo(0, 0)\", waitMs: 400 }, { name: 'pricing', actionScript: \"document.querySelector('#pricing')?.scrollIntoView()\", waitMs: 600 }];">${escapeHtml(settingsInput.preScreenshotScript)}</textarea></div>
       <div><label>CRON_SCHEDULE</label><input name="cronSchedule" value="${escapeHtml(settingsInput.cronSchedule)}" required /></div>
       <div><label>SCREENSHOT_DIR</label><input name="screenshotDir" value="${escapeHtml(settingsInput.screenshotDir)}" required /></div>
       <div><label>SCREENSHOT_FULL_PAGE</label><select name="screenshotFullPage"><option value="false" ${settingsInput.screenshotFullPage === "false" ? "selected" : ""}>false</option><option value="true" ${settingsInput.screenshotFullPage === "true" ? "selected" : ""}>true</option></select></div>
@@ -283,6 +285,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
       const form = new URLSearchParams(body);
       const parsed = parseRuntimeSettingsInput({
         targetUrls: form.get("targetUrls") || "",
+        preScreenshotScript: form.get("preScreenshotScript") || "",
         cronSchedule: form.get("cronSchedule") || "",
         screenshotDir: form.get("screenshotDir") || "",
         screenshotFullPage: form.get("screenshotFullPage") || "false",
@@ -302,6 +305,7 @@ export function createControlPlaneHandler(deps: ControlPlaneDeps) {
         res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
         res.end(renderForm({
           targetUrls: form.get("targetUrls") || "",
+          preScreenshotScript: form.get("preScreenshotScript") || "",
           cronSchedule: form.get("cronSchedule") || "",
           screenshotDir: form.get("screenshotDir") || "",
           screenshotFullPage: form.get("screenshotFullPage") || "false",

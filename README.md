@@ -53,6 +53,7 @@ After first deployment, open your app root (`/`).
    - `TARGET_URLS`
    - `CRON_SCHEDULE`
    - `SCREENSHOT_DIR`
+- `PRE_SCREENSHOT_SCRIPT` (optional JavaScript executed in the page before capture)
    - `SCREENSHOT_FULL_PAGE`
    - `VIEWPORT_WIDTH`
    - `VIEWPORT_HEIGHT`
@@ -145,6 +146,7 @@ See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.
 - `TARGET_URLS`
 - `CRON_SCHEDULE`
 - `SCREENSHOT_DIR`
+- `PRE_SCREENSHOT_SCRIPT` (optional JavaScript executed in the page before screenshot)
 - `SCREENSHOT_FULL_PAGE`
 - `VIEWPORT_WIDTH`
 - `VIEWPORT_HEIGHT`
@@ -175,6 +177,77 @@ npm run dev
 - `npm run dev -- --once` -> capture immediately once, then exit
 - `npm run dev -- --dry-run` -> validate startup config
 - `npm run dev -- --setup` -> setup server mode (no scheduler start)
+
+## Custom Script Guide (Copy/Paste)
+
+Use `PRE_SCREENSHOT_SCRIPT` in the web UI field:
+
+- Setup screen: `PRE_SCREENSHOT_SCRIPT (optional browser JavaScript; return array for multi-shot)`
+- Dashboard update screen: same field
+
+The script runs inside the page before capture.
+
+### Option A: One screenshot (default)
+
+If your script does not return an array, the app captures one screenshot.
+
+```js
+window.scrollTo(0, 0);
+document.querySelector("[data-accept-cookies]")?.click();
+```
+
+### Option B: Multiple screenshots in one session
+
+Return an array of steps. The browser page stays open through all steps, then closes after the last screenshot.
+
+```js
+return [
+  {
+    name: "hero",
+    actionScript: "window.scrollTo(0, 0);",
+    waitMs: 300
+  },
+  {
+    name: "features",
+    actionScript: "document.querySelector('#features')?.scrollIntoView({ block: 'start' });",
+    waitMs: 500
+  },
+  {
+    name: "pricing",
+    actionScript: "document.querySelector('#pricing')?.scrollIntoView({ block: 'start' });",
+    waitMs: 500
+  }
+];
+```
+
+### Step fields (for multi-shot)
+
+- `name` (optional): file suffix for that screenshot
+- `actionScript` (optional): JavaScript string run before the screenshot
+- `waitMs` (optional): additional wait before screenshot
+- `fullPage` (optional): override full page capture for that step
+
+### Context object available to scripts
+
+Top-level script receives `context`:
+
+```js
+if (context.url.includes("example.com")) {
+  window.scrollTo(0, 0);
+}
+```
+
+Step `actionScript` receives:
+
+- `context.url`
+- `context.stepIndex`
+- `context.stepName`
+
+### Notes
+
+- `name` is sanitized for filename safety.
+- If `waitMs` is omitted, app uses `EXTRA_WAIT_MS`.
+- If `fullPage` is omitted, app uses `SCREENSHOT_FULL_PAGE`.
 
 ## Docker
 
