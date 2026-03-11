@@ -32,10 +32,10 @@ export function buildScreenshotFilename(url: string, date = new Date()): string 
   const trimmedBase = base.slice(0, MAX_BASENAME_LENGTH);
   const safe = trimmedBase || "screenshot";
 
-  return `${safe}.png`;
+  return `${safe}.avif`;
 }
 
 export function buildScreenshotPath(dir: string, filename: string): string {
   const safe = sanitizePart(path.basename(filename, path.extname(filename)));
-  return path.join(dir, `${safe || "screenshot"}.png`);
+  return path.join(dir, `${safe || "screenshot"}.avif`);
 }

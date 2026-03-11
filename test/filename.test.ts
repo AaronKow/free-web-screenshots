@@ -5,7 +5,7 @@ describe("buildScreenshotFilename", () => {
   it("generates sanitized UTC timestamped file name", () => {
     const date = new Date("2026-03-10T12:34:56.000Z");
     const name = buildScreenshotFilename("https://example.com/some/path?x=1", date);
-    expect(name).toBe("example.com__some-path__20260310T123456Z.png");
+    expect(name).toBe("example.com__some-path__20260310T123456Z.avif");
   });
 
   it("falls back to root for empty path", () => {

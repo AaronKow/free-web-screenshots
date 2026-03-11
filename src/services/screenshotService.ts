@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { BrowserContext, Page, chromium } from "playwright";
+import sharp from "sharp";
 import type { RunConfig } from "../config";
 import { logger } from "../logger";
 import type { StorageUploader } from "../storage/types";
@@ -35,6 +36,9 @@ export interface CaptureRunSummary {
   finishedAt: string;
   results: UrlRunResult[];
 }
+
+const AVIF_QUALITY = 58;
+const AVIF_EFFORT = 4;
 
 export class ScreenshotService {
   constructor(
@@ -200,16 +204,19 @@ export class ScreenshotService {
 
       const filename = this.buildStepFilename(url, step, i);
       const screenshotPath = buildScreenshotPath(this.config.screenshotDir, filename);
-      await page.screenshot({
-        path: screenshotPath,
+      const screenshotPng = await page.screenshot({
         fullPage: step.fullPage ?? this.config.screenshotFullPage,
         type: "png"
       });
+      const screenshotAvif = await sharp(screenshotPng)
+        .avif({ quality: AVIF_QUALITY, effort: AVIF_EFFORT })
+        .toBuffer();
+      await fs.writeFile(screenshotPath, screenshotAvif);
 
       const upload = await this.uploader.uploadFile({
         localPath: screenshotPath,
         fileName: filename,
-        mimeType: "image/png"
+        mimeType: "image/avif"
       });
 
       if (this.config.deleteLocalAfterUpload) {
@@ -253,9 +260,9 @@ export class ScreenshotService {
   }
 
   private buildStepFilename(url: string, step: ScriptCaptureStep, index: number): string {
-    const base = buildScreenshotFilename(url, new Date()).replace(/\.png$/i, "");
+    const base = buildScreenshotFilename(url, new Date()).replace(/\.avif$/i, "");
     const safeName = sanitizeFileToken(step.name || `shot-${index + 1}`);
-    return `${base}__${safeName}.png`;
+    return `${base}__${safeName}.avif`;
   }
 }
 
