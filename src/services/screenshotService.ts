@@ -31,7 +31,11 @@ export class ScreenshotService {
     await fs.mkdir(this.config.screenshotDir, { recursive: true });
 
     const start = new Date();
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      // Helps WebGL-dependent pages work reliably in headless/container contexts.
+      args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+    });
     const context = await browser.newContext({
       viewport: {
         width: this.config.viewportWidth,
