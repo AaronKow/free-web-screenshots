@@ -243,6 +243,43 @@ npm run restart:pm2
 
 First deploy still requires OAuth/runtime setup from the root URL (`/`) unless `GOOGLE_REFRESH_TOKEN` and runtime config are already present.
 
+### 4) Nginx reverse proxy (`:80` -> `:8080`)
+
+PM2 manages the Node.js process, but it does not proxy HTTP traffic. Keep the app on `127.0.0.1:8080`, and let Nginx listen on port `80`.
+
+Example server block:
+
+```nginx
+server {
+  listen 80;
+  server_name screenshots.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+Ubuntu/Debian enable flow:
+
+```bash
+sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/free-web-screenshots
+# edit /etc/nginx/sites-available/free-web-screenshots with the server block above
+sudo ln -sf /etc/nginx/sites-available/free-web-screenshots /etc/nginx/sites-enabled/free-web-screenshots
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Optional hardening:
+
+- Keep app bind as `127.0.0.1:8080` (not public `0.0.0.0`) when Nginx is on the same host
+- Add TLS with Let's Encrypt (`certbot`) and redirect HTTP -> HTTPS
+
 ## Health Endpoint
 
 `GET /health`
