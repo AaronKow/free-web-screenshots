@@ -159,8 +159,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     env.GOOGLE_CLIENT_SECRET?.trim() ||
     credentialsFromFile.client_secret ||
     required(undefined, "GOOGLE_CLIENT_SECRET", errors);
-  const googleRedirectUriFromEnv = env.GOOGLE_REDIRECT_URI?.trim();
-
   const googleRefreshToken = env.GOOGLE_REFRESH_TOKEN?.trim() || tokenFromFile.refreshToken;
 
   let oauthSetupEnabled = false;
@@ -184,7 +182,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const appBaseUrl = env.APP_BASE_URL?.trim();
   const oauthStateSecret = env.OAUTH_STATE_SECRET?.trim();
-  let googleRedirectUri = googleRedirectUriFromEnv || credentialsFromFile.redirect_uri || "";
+  let googleRedirectUri = "";
+
+  try {
+    const parsedBase = new URL(appBaseUrl || `http://localhost:${port}`);
+    if (appBaseUrl && parsedBase.protocol !== "https:" && parsedBase.hostname !== "localhost") {
+      errors.push("APP_BASE_URL must use https in non-local environments");
+    }
+    googleRedirectUri = new URL(oauthCallbackPath, parsedBase).toString();
+  } catch {
+    errors.push("APP_BASE_URL must be a valid URL");
+  }
 
   if (oauthSetupEnabled) {
     if (!tokenFromFile.tokenFile) {
@@ -199,28 +207,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       errors.push("OAUTH_STATE_SECRET is required and must be at least 32 chars when OAUTH_SETUP_ENABLED=true");
     }
 
-    if (appBaseUrl) {
-      try {
-        const parsedBase = new URL(appBaseUrl);
-        if (parsedBase.protocol !== "https:" && parsedBase.hostname !== "localhost") {
-          errors.push("APP_BASE_URL must use https in non-local environments");
-        }
-
-        const expectedRedirect = new URL(oauthCallbackPath, parsedBase).toString();
-        // In hosted setup mode, callback should follow deployment URL.
-        // We still fail fast if user explicitly sets a conflicting redirect URI.
-        if (googleRedirectUriFromEnv && googleRedirectUriFromEnv !== expectedRedirect) {
-          errors.push(`GOOGLE_REDIRECT_URI must equal ${expectedRedirect} when OAUTH_SETUP_ENABLED=true`);
-        }
-        googleRedirectUri = expectedRedirect;
-      } catch {
-        errors.push("APP_BASE_URL must be a valid URL");
-      }
-    }
-  }
-
-  if (!googleRedirectUri) {
-    errors.push("GOOGLE_REDIRECT_URI is required");
+    // Redirect URI is always derived from APP_BASE_URL + OAUTH_CALLBACK_PATH.
   }
 
   const appUser = env.APP_USER?.trim();

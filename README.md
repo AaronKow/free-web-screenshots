@@ -118,7 +118,6 @@ See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.
 
 - `GOOGLE_CLIENT_ID` (required)
 - `GOOGLE_CLIENT_SECRET` (required)
-- `GOOGLE_REDIRECT_URI` (required unless `OAUTH_SETUP_ENABLED=true` with valid `APP_BASE_URL`; then derived as `APP_BASE_URL + OAUTH_CALLBACK_PATH`)
 - `GOOGLE_REFRESH_TOKEN` (optional if using setup flow + token file)
 - `GOOGLE_TOKEN_FILE` (recommended; required for hosted setup)
 - `GOOGLE_CREDENTIALS_FILE` (optional)
@@ -126,7 +125,7 @@ See [.env.example](/Users/goodboyengineering/projects/free-web-screenshots/.env.
 ### Hosted setup controls
 
 - `OAUTH_SETUP_ENABLED` (`true`/`false`)
-- `APP_BASE_URL` (required when setup enabled)
+- `APP_BASE_URL` (required when setup enabled; callback URL is derived from this origin)
 - `OAUTH_SETUP_PATH` (default `/oauth/start`)
 - `OAUTH_CALLBACK_PATH` (default `/callback`)
 - `OAUTH_STATE_SECRET` (required when setup enabled; at least 32 chars)
@@ -388,7 +387,7 @@ Response includes:
 2. Root keeps showing setup form:
    - Ensure runtime settings were saved and `GOOGLE_TOKEN_FILE` contains `refresh_token`.
 3. OAuth callback fails:
-   - Verify `GOOGLE_REDIRECT_URI` exactly matches Google OAuth client settings.
+   - Verify Google OAuth authorized redirect URI matches `APP_BASE_URL + OAUTH_CALLBACK_PATH`.
 4. No refresh token returned:
    - Revoke prior app access, re-run setup (OAuth uses `offline` + `consent`).
 5. Visible-folder upload errors:

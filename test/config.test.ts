@@ -6,7 +6,6 @@ function baseEnv(): NodeJS.ProcessEnv {
   return {
     GOOGLE_CLIENT_ID: "client-id",
     GOOGLE_CLIENT_SECRET: "client-secret",
-    GOOGLE_REDIRECT_URI: "http://localhost/callback",
     GOOGLE_REFRESH_TOKEN: "refresh-token"
   };
 }
@@ -16,13 +15,13 @@ describe("loadConfig", () => {
     const config = loadConfig(baseEnv());
     expect(config.port).toBe(8080);
     expect(config.oauthSetupPath).toBe("/oauth/start");
+    expect(config.googleRedirectUri).toBe("http://localhost:8080/callback");
   });
 
   it("allows no refresh token when oauth setup enabled", () => {
     const config = loadConfig({
       ...baseEnv(),
       GOOGLE_REFRESH_TOKEN: "",
-      GOOGLE_REDIRECT_URI: "https://screenshots.example.com/callback",
       OAUTH_SETUP_ENABLED: "true",
       APP_BASE_URL: "https://screenshots.example.com",
       OAUTH_STATE_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
@@ -31,6 +30,7 @@ describe("loadConfig", () => {
 
     expect(config.googleRefreshToken).toBeUndefined();
     expect(config.oauthSetupEnabled).toBe(true);
+    expect(config.googleRedirectUri).toBe("https://screenshots.example.com/callback");
   });
 
   it("requires app user and pass together", () => {
@@ -42,18 +42,27 @@ describe("loadConfig", () => {
     ).toThrow(/APP_USER and APP_PASS/);
   });
 
-  it("enforces hosted callback redirect match", () => {
+  it("derives callback from app base url", () => {
     expect(() =>
       loadConfig({
         ...baseEnv(),
         GOOGLE_REFRESH_TOKEN: "",
         OAUTH_SETUP_ENABLED: "true",
-        APP_BASE_URL: "https://screenshots.example.com",
+        APP_BASE_URL: "https://screenshots.example.com:8443",
         OAUTH_STATE_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
-        GOOGLE_TOKEN_FILE: "/tmp/google-token.json",
-        GOOGLE_REDIRECT_URI: "https://screenshots.example.com/other"
+        GOOGLE_TOKEN_FILE: "/tmp/google-token.json"
       })
-    ).toThrow(/GOOGLE_REDIRECT_URI must equal/);
+    ).not.toThrow();
+
+    const config = loadConfig({
+      ...baseEnv(),
+      GOOGLE_REFRESH_TOKEN: "",
+      OAUTH_SETUP_ENABLED: "true",
+      APP_BASE_URL: "https://screenshots.example.com:8443",
+      OAUTH_STATE_SECRET: "abcdefghijklmnopqrstuvwxyz123456",
+      GOOGLE_TOKEN_FILE: "/tmp/google-token.json"
+    });
+    expect(config.googleRedirectUri).toBe("https://screenshots.example.com:8443/callback");
   });
 });
 
