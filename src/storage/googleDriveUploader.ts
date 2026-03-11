@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { drive_v3, google } from "googleapis";
+import { auth, drive, drive_v3 } from "googleapis/build/src/apis/drive";
 import { logger } from "../logger";
 import type { RunConfig } from "../config";
 import type { StorageUploader, UploadFileRequest, UploadResult } from "./types";
@@ -20,7 +20,7 @@ export class GoogleDriveUploader implements StorageUploader {
 
     const scope = config.googleDriveMode === "appdata" ? APP_DATA_SCOPE : VISIBLE_FOLDER_SCOPE;
 
-    this.oauthClient = new google.auth.OAuth2(
+    this.oauthClient = new auth.OAuth2(
       config.googleClientId,
       config.googleClientSecret,
       config.googleRedirectUri
@@ -53,7 +53,7 @@ export class GoogleDriveUploader implements StorageUploader {
       logger.info({ tokenFile: config.googleTokenFile }, "Updated OAuth token file");
     });
 
-    this.drive = google.drive({
+    this.drive = drive({
       version: "v3",
       auth: this.oauthClient
     });

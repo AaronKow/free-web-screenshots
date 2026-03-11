@@ -6,7 +6,7 @@
   "type": "commonjs",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "start:pm2": "pm2 start ecosystem.config.cjs --env production",
     "restart:pm2": "pm2 restart free-web-screenshots --update-env",

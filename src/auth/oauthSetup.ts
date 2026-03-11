@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { google } from "googleapis";
+import { auth } from "googleapis/build/src/apis/drive";
 import type { AppConfig } from "../config";
 import { logger } from "../logger";
 import type { GoogleDriveMode } from "../runtime/settings";
@@ -85,7 +85,7 @@ export class OAuthSetupHandler {
   ) {}
 
   createAuthorizationUrl(): string {
-    const oauth2 = new google.auth.OAuth2(
+    const oauth2 = new auth.OAuth2(
       this.config.googleClientId,
       this.config.googleClientSecret,
       this.config.googleRedirectUri
@@ -131,7 +131,7 @@ export class OAuthSetupHandler {
     }
 
     try {
-      const oauth2 = new google.auth.OAuth2(
+      const oauth2 = new auth.OAuth2(
         this.config.googleClientId,
         this.config.googleClientSecret,
         this.config.googleRedirectUri

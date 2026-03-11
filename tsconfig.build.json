@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "incremental": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["test", "dist", "node_modules", "tmp"]
+}
