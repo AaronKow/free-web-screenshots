@@ -192,6 +192,7 @@ npm run dev
 - Default video size is `960x540` (`VIDEO_WIDTH`/`VIDEO_HEIGHT`) for lightweight uploads with good clarity.
 - Video output is AV1-encoded MP4 (`*.mp4`) via `ffmpeg` (`libsvtav1`).
 - `ffmpeg` must be installed on the runtime host/container.
+- `PRE_SCREENSHOT_SCRIPT` also runs for video captures. If it returns step arrays, each step action/wait is applied before recording starts.
 - Recording cadence is controlled by your existing `CRON_SCHEDULE`.
 
 ## Custom Script Guide (Copy/Paste)

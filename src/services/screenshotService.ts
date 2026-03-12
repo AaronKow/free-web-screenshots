@@ -130,6 +130,7 @@ export class ScreenshotService {
             const collected: CaptureArtifact[] = [];
 
             if (this.shouldCaptureVideo()) {
+              await this.applyScriptStepsForVideo(page, url, steps);
               const videoCapture = await this.captureVideoForPage(page, url);
               collected.push(videoCapture);
             }
@@ -284,6 +285,19 @@ export class ScreenshotService {
       uploadedFileId: "",
       uploadedFileName: ""
     };
+  }
+
+  private async applyScriptStepsForVideo(page: Page, url: string, scriptSteps: ScriptCaptureStep[]): Promise<void> {
+    for (let i = 0; i < scriptSteps.length; i += 1) {
+      const step = scriptSteps[i];
+      if (step.actionScript?.trim()) {
+        await this.runStepActionScript(page, url, step, i);
+      }
+      const waitMs = step.waitMs ?? this.config.extraWaitMs;
+      if (waitMs > 0) {
+        await page.waitForTimeout(waitMs);
+      }
+    }
   }
 
   private async finalizeCapturedVideo(
